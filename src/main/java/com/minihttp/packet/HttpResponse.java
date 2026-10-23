@@ -6,7 +6,16 @@ import com.minihttp.packet.structure.HttpBody;
 import com.minihttp.packet.structure.HttpHeader;
 import lombok.NonNull;
 
-public final class HttpResponse extends HttpPacket {
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.Map;
+
+public class HttpResponse extends HttpPacket {
+    private static final DateTimeFormatter IMF_FIXDATE =
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.ENGLISH).withZone(ZoneOffset.UTC);
+
     private HttpStatus status;
 
     public HttpResponse(@NonNull HttpVersion version,
@@ -25,8 +34,25 @@ public final class HttpResponse extends HttpPacket {
         this.status = status;
     }
 
+    public byte[] encodeForHead() {
+        return encode(false);
+    }
+
     @Override
     protected String startLine() {
         return this.version.token() + " " + this.status.code() + " " + this.status.reason();
+    }
+
+    @Override
+    protected boolean bodyAllowed() {
+        return this.status.permitsBody();
+    }
+
+    @Override
+    protected Map<String, String> generatedHeaders() {
+        if (this.header.contains("Date")) {
+            return Map.of();
+        }
+        return Map.of("Date", IMF_FIXDATE.format(Instant.now()));
     }
 }

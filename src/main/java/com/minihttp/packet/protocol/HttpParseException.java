@@ -9,6 +9,6 @@ public class HttpParseException extends RuntimeException {
     }
 
     public HttpStatus status() {
-        return status;
+        return this.status;
     }
 }

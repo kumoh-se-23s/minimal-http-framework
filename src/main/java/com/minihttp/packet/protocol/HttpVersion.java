@@ -22,10 +22,10 @@ public enum HttpVersion {
     }
 
     public String token() {
-        return token;
+        return this.token;
     }
 
     public boolean defaultKeepAlive() {
-        return defaultKeepAlive;
+        return this.defaultKeepAlive;
     }
 }

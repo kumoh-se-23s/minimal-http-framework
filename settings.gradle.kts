@@ -3,3 +3,5 @@ plugins {
 }
 
 rootProject.name = "minimal-http-framework"
+
+include("example")

@@ -7,6 +7,7 @@ import com.minihttp.example.http.HttpStatus;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -14,15 +15,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/**
- * (메서드, 경로) → Handler. 경로에 {name}을 쓰면 경로 변수로 잡는다.
- *
- * <pre>
- * router.get("/users/{id}", req -> HttpResponse.ok(req.pathParam("id")));
- * </pre>
- */
 public final class Router {
     private record Route(HttpMethod method, List<String> segments, Handler handler) {
+        long literalCount() {
+            return segments.stream().filter(segment -> !segment.startsWith("{")).count();
+        }
     }
 
     private record Match(Route route, Map<String, String> params) {
@@ -50,6 +47,11 @@ public final class Router {
         return add(HttpMethod.DELETE, pattern, handler);
     }
 
+    public Router register(Object controller) {
+        ControllerRegistrar.register(this, controller);
+        return this;
+    }
+
     public Router add(HttpMethod method, String pattern, Handler handler) {
         routes.add(new Route(method, segments(pattern), handler));
         return this;
@@ -70,7 +72,6 @@ public final class Router {
         }
 
         Match found = find(matches, request.method());
-        // HEAD는 GET과 같은 응답에서 바디만 뺀 것이다 (바디 제거는 ConnectionHandler가 한다).
         if (found == null && request.method() == HttpMethod.HEAD) {
             found = find(matches, HttpMethod.GET);
         }
@@ -87,15 +88,12 @@ public final class Router {
     }
 
     private static Match find(List<Match> matches, HttpMethod method) {
-        for (Match match : matches) {
-            if (match.route().method() == method) {
-                return match;
-            }
-        }
-        return null;
+        return matches.stream()
+                .filter(match -> match.route().method() == method)
+                .max(Comparator.comparingLong(match -> match.route().literalCount()))
+                .orElse(null);
     }
 
-    /** 맞으면 경로 변수 맵, 안 맞으면 null. */
     private static Map<String, String> match(List<String> pattern, List<String> path) {
         if (pattern.size() != path.size()) {
             return null;

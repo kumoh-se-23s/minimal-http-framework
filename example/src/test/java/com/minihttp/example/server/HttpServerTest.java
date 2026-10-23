@@ -62,6 +62,19 @@ class HttpServerTest {
     }
 
     @Test
+    void rejectsNonNumericPathParam() throws Exception {
+        HttpResponse<String> response = send(HttpRequest.newBuilder(uri("/users/abc")).build());
+
+        assertEquals(400, response.statusCode());
+        assertEquals("Invalid path parameter 'id': expected long", response.body());
+    }
+
+    @Test
+    void convertsQueryParamsToInts() throws Exception {
+        assertEquals("5", send(HttpRequest.newBuilder(uri("/add?a=2&b=3")).build()).body());
+    }
+
+    @Test
     void returnsNotFound() throws Exception {
         assertEquals(404, send(HttpRequest.newBuilder(uri("/missing")).build()).statusCode());
     }

@@ -45,6 +45,16 @@ public class HttpResponse extends HttpPacket {
     }
 
     @Override
+    protected boolean contentLengthRequired() {
+        return this.bodyAllowed();
+    }
+
+    @Override
+    protected void validate() {
+
+    }
+
+    @Override
     protected Map<String, String> generatedHeaders() {
         if (this.header.contains("Date")) {
             return Map.of();

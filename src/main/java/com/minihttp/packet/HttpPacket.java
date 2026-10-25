@@ -13,8 +13,8 @@ import java.util.Optional;
 
 public abstract class HttpPacket {
     private static final String CRLF = "\r\n";
+    private static final String CONNECTION = "Connection";
     private static final String CONTENT_LENGTH = "Content-Length";
-    private static final String TRANSFER_ENCODING = "Transfer-Encoding";
 
     protected HttpVersion version;
     protected final HttpHeader header;
@@ -38,6 +38,14 @@ public abstract class HttpPacket {
         return this.header;
     }
 
+    public void setCloseHeader() {
+        this.header.set(CONNECTION, "close");
+    }
+
+    public void setContentLength(int contentLength) {
+        this.header.set(CONTENT_LENGTH, String.valueOf(contentLength));
+    }
+
     public HttpBody body() {
         return this.body;
     }
@@ -52,16 +60,11 @@ public abstract class HttpPacket {
 
     protected abstract String startLine();
 
-    protected boolean bodyAllowed() {
-        return true;
-    }
+    protected abstract boolean bodyAllowed();
 
-    protected boolean contentLengthRequired() {
-        return true;
-    }
+    protected abstract boolean contentLengthRequired();
 
-    protected void validate() {
-    }
+    protected abstract void validate();
 
     protected Map<String, String> generatedHeaders() {
         return Map.of();

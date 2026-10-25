@@ -29,6 +29,7 @@ public enum HttpStatus {
 
     INTERNAL_SERVER_ERROR(500, "Internal Server Error"),
     NOT_IMPLEMENTED(501, "Not Implemented"),
+    SERVICE_UNAVAILABLE(503, "Service Unavailable"),
     HTTP_VERSION_NOT_SUPPORTED(505, "HTTP Version Not Supported");
 
     private final int code;

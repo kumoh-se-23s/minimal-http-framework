@@ -119,4 +119,9 @@ public class HttpRequest extends HttpPacket {
     private static String urlEncode(String component) {
         return URLEncoder.encode(component, StandardCharsets.UTF_8);
     }
+
+    @Override
+    protected boolean bodyAllowed() {
+        return this.method != HttpMethod.GET;
+    }
 }

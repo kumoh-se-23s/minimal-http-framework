@@ -67,44 +67,6 @@ public abstract class HttpPacket {
         return Map.of();
     }
 
-    public byte[] encode() {
-        return encode(true);
-    }
-
-    protected byte[] encode(boolean includeBody) {
-        validate();
-        boolean bodyAllowed = bodyAllowed();
-        if (!bodyAllowed && !this.body.isEmpty()) {
-            throw new IllegalStateException("Body is not allowed for: " + startLine());
-        }
-
-        StringBuilder head = new StringBuilder();
-        head.append(startLine()).append(CRLF); // start-line 생성
-        for (String name : this.header.names()) {
-            if (CONTENT_LENGTH.equalsIgnoreCase(name)) {
-                continue;
-            }
-            for (String value : this.header.getAll(name)) {
-                writeField(head, name, value); // 헤더 값 채우기
-            }
-        }
-        generatedHeaders().forEach((name, value) -> writeField(head, name, value));
-        if (bodyAllowed && !this.header.contains(TRANSFER_ENCODING)
-                && (!this.body.isEmpty() || contentLengthRequired())) {
-            writeField(head, CONTENT_LENGTH, String.valueOf(this.body.length()));
-        }
-        head.append(CRLF);
-
-        byte[] headBytes = head.toString().getBytes(StandardCharsets.ISO_8859_1);
-        if (!includeBody || !bodyAllowed) {
-            return headBytes;
-        }
-        byte[] bodyBytes = this.body.bytes();
-        byte[] message = Arrays.copyOf(headBytes, headBytes.length + bodyBytes.length);
-        System.arraycopy(bodyBytes, 0, message, headBytes.length, bodyBytes.length);
-        return message;
-    }
-
     private static void writeField(StringBuilder head, String name, String value) {
         head.append(name).append(": ").append(value).append(CRLF);
     }

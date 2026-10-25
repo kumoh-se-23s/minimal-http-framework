@@ -34,10 +34,6 @@ public class HttpResponse extends HttpPacket {
         this.status = status;
     }
 
-    public byte[] encodeForHead() {
-        return encode(false);
-    }
-
     @Override
     protected String startLine() {
         return this.version.token() + " " + this.status.code() + " " + this.status.reason();

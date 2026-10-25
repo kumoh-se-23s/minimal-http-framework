@@ -2,13 +2,7 @@ package com.minihttp.core.utils;
 
 import lombok.NonNull;
 
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.Deque;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 import java.util.function.Supplier;
 
 
@@ -50,16 +44,16 @@ public final class GenericObjectPool<T> implements Pool<T> {
     }
 
     @Override
-    public T acquire() {
+    public Optional<T> tryAcquire() {
         synchronized (this.lock) {
             if (this.borrowed.size() + this.pendingCreations >= this.maxSize) {
-                throw new PoolExhaustedException();
+                return Optional.empty();
             }
 
             T reused = this.idle.pollLast();
             if (reused != null) {
                 this.borrowed.add(reused);
-                return reused;
+                return Optional.of(reused);
             }
 
             this.pendingCreations++;
@@ -68,7 +62,7 @@ public final class GenericObjectPool<T> implements Pool<T> {
         T created = null;
         try {
             created = Objects.requireNonNull(this.factory.create(), "factory.create() returned null");
-            return created;
+            return Optional.of(created);
         } finally {
             synchronized (this.lock) {
                 this.pendingCreations--;

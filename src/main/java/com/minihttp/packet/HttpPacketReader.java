@@ -120,11 +120,11 @@ public class HttpPacketReader {
     private int indexOfHeaderEnd(int findFrom) {
         // 헤더의 끝 (CRLFCRLF)를 찾자!
         for (int index = findFrom; index <= this.end - HEADER_END_BYTES.length; index++) {
-            boolean isHeaderStart = Arrays.equals(
+            boolean isHeaderEnd = Arrays.equals(
                     this.buffer, index, index + HEADER_END_BYTES.length,
                     HEADER_END_BYTES, 0, HEADER_END_BYTES.length
             );
-            if (isHeaderStart) {
+            if (isHeaderEnd) {
                 return index;
             }
         }

@@ -69,22 +69,34 @@ public final class DefaultHttpHeader implements HttpHeader {
         if (name.isEmpty()) {
             throw new IllegalArgumentException("Header name must not be empty");
         }
-        for (int i = 0; i < name.length(); i++) {
-            if (!isTokenChar(name.charAt(i))) {
-                throw new IllegalArgumentException("Invalid header name: " + name);
-            }
+
+        if (name.chars().anyMatch(charCode -> !isTokenChar((char) charCode))) {
+            throw new IllegalArgumentException("Invalid header name: " + name);
         }
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if ((c < 0x20 && c != '\t') || c == 0x7F || c > 0xFF) {
-                throw new IllegalArgumentException("Invalid character in header value of " + name + ": U+" + String.format("%04X", (int) c));
-            }
-        }
+
+        value.chars()
+                .filter(charCode -> isAsciiControlChar((char) charCode))
+                .findFirst()
+                .ifPresent(
+                        charCode -> {
+                            throw new IllegalArgumentException(
+                                "Invalid character in header value of " + name + ": U+" + String.format("%04X", charCode)
+                            );
+                        }
+                );
     }
 
-    private static boolean isTokenChar(char c) {
-        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
-                || "!#$%&'*+-.^_`|~".indexOf(c) >= 0;
+    private static boolean isTokenChar(char maybeTokenChar) {
+        boolean isLowerAlphabet = 'a' <= maybeTokenChar && maybeTokenChar <= 'z';
+        boolean isUpperAlphabet = 'A' <= maybeTokenChar && maybeTokenChar <= 'Z';
+        boolean isNumeric = '0' <= maybeTokenChar && maybeTokenChar <= '9';
+        boolean isAllowedSpecialChar = "!#$%&'*+-.^_`|~".indexOf(maybeTokenChar) >= 0;
+
+        return isLowerAlphabet || isUpperAlphabet || isNumeric || isAllowedSpecialChar;
+    }
+
+    private static boolean isAsciiControlChar(char maybeControlChar) {
+        return maybeControlChar < 0x20 && maybeControlChar != '\t' || maybeControlChar == 0x7F || maybeControlChar > 0xFF;
     }
 
     private static String key(String name) {

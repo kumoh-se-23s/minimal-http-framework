@@ -1,5 +1,6 @@
 package com.minihttp.packet;
 
+import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.protocol.HttpMethod;
 import com.minihttp.packet.protocol.HttpVersion;
 import com.minihttp.packet.structure.DefaultHttpBody;
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -22,9 +24,9 @@ class HttpRequestTest {
 
     private static HttpHeader host(String... connection) {
         HttpHeader header = new DefaultHttpHeader();
-        header.set("Host", "localhost");
+        header.set(HttpHeaderField.HOST, "localhost");
         for (String value : connection) {
-            header.add("Connection", value);
+            header.add(HttpHeaderField.CONNECTION, value);
         }
         return header;
     }
@@ -35,22 +37,18 @@ class HttpRequestTest {
                 method, path, query, Map.of());
     }
 
-    private static String text(byte[] bytes) {
-        return new String(bytes, StandardCharsets.UTF_8);
+    @Test
+    void startLineHasMethodTargetAndVersion() {
+        assertEquals("GET /users HTTP/1.1",
+                request(HttpVersion.HTTP_1_1, host(), HttpMethod.GET, "/users", Map.of(), "").startLine());
     }
 
     @Test
-    void getWithoutBodyHasNoContentLength() {
-        assertEquals("GET /users HTTP/1.1\r\nHost: localhost\r\n\r\n",
-                text(request(HttpVersion.HTTP_1_1, host(), HttpMethod.GET, "/users", Map.of(), "").encode()));
-    }
-
-    @Test
-    void postAlwaysSendsContentLength() {
-        assertTrue(text(request(HttpVersion.HTTP_1_1, host(), HttpMethod.POST, "/users", Map.of(), "").encode())
-                .contains("Content-Length: 0\r\n"));
-        assertTrue(text(request(HttpVersion.HTTP_1_1, host(), HttpMethod.POST, "/users", Map.of(), "{}").encode())
-                .endsWith("Content-Length: 2\r\n\r\n{}"));
+    void contentLengthIsRequiredOnlyForMethodsWithBody() {
+        assertFalse(request(HttpVersion.HTTP_1_1, host(), HttpMethod.GET, "/users", Map.of(), "").contentLengthRequired());
+        assertTrue(request(HttpVersion.HTTP_1_1, host(), HttpMethod.POST, "/users", Map.of(), "").contentLengthRequired());
+        assertTrue(request(HttpVersion.HTTP_1_1, host(), HttpMethod.PUT, "/users", Map.of(), "{}").contentLengthRequired());
+        assertTrue(request(HttpVersion.HTTP_1_1, host(), HttpMethod.PATCH, "/users", Map.of(), "{}").contentLengthRequired());
     }
 
     @Test
@@ -63,7 +61,7 @@ class HttpRequestTest {
         query.put("a b", List.of("c d"));
         HttpRequest request = request(HttpVersion.HTTP_1_1, host(), HttpMethod.GET, "/", query, "");
 
-        assertTrue(text(request.encode()).startsWith("GET /?z=1&id=1&ID=2&tag=a&tag=b&a+b=c+d HTTP/1.1\r\n"));
+        assertEquals("GET /?z=1&id=1&ID=2&tag=a&tag=b&a+b=c+d HTTP/1.1", request.startLine());
         assertEquals(List.of("a", "b"), request.queryParams("tag"));
         assertEquals(Optional.of("1"), request.queryParam("id"));
         assertEquals(Optional.of("2"), request.queryParam("ID"));
@@ -73,15 +71,15 @@ class HttpRequestTest {
     void pathIsPercentEncodedPerSegment() {
         HttpRequest request = request(HttpVersion.HTTP_1_1, host(), HttpMethod.GET, "/my files/김", Map.of(), "");
 
-        assertTrue(text(request.encode()).startsWith("GET /my%20files/%EA%B9%80 HTTP/1.1\r\n"));
+        assertEquals("GET /my%20files/%EA%B9%80 HTTP/1.1", request.startLine());
     }
 
     @Test
     void http11RequiresHost() {
         assertThrows(IllegalStateException.class, () ->
-                request(HttpVersion.HTTP_1_1, new DefaultHttpHeader(), HttpMethod.GET, "/", Map.of(), "").encode());
-        assertEquals("GET / HTTP/1.0\r\n\r\n",
-                text(request(HttpVersion.HTTP_1_0, new DefaultHttpHeader(), HttpMethod.GET, "/", Map.of(), "").encode()));
+                request(HttpVersion.HTTP_1_1, new DefaultHttpHeader(), HttpMethod.GET, "/", Map.of(), "").validate());
+        assertDoesNotThrow(() ->
+                request(HttpVersion.HTTP_1_0, new DefaultHttpHeader(), HttpMethod.GET, "/", Map.of(), "").validate());
     }
 
     @Test

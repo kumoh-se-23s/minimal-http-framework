@@ -74,16 +74,20 @@ public final class DefaultHttpHeader implements HttpHeader {
             throw new IllegalArgumentException("Invalid header name: " + name);
         }
 
-        value.chars()
-                .filter(charCode -> isAsciiControlChar((char) charCode))
-                .findFirst()
-                .ifPresent(
-                        charCode -> {
-                            throw new IllegalArgumentException(
-                                "Invalid character in header value of " + name + ": U+" + String.format("%04X", charCode)
-                            );
-                        }
-                );
+        if (name.chars().anyMatch(charCode -> isAsciiControlChar((char) charCode))) {
+            throw new IllegalArgumentException("Invalid character in header value of " + name);
+        }
+
+//        value.chars()
+//                .filter(charCode -> isAsciiControlChar((char) charCode))
+//                .findFirst()
+//                .ifPresent(
+//                        charCode -> {
+//                            throw new IllegalArgumentException(
+//                                "Invalid character in header value of " + name + ": U+" + String.format("%04X", charCode)
+//                            );
+//                        }
+//                );
     }
 
     private static boolean isTokenChar(char maybeTokenChar) {

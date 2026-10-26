@@ -91,7 +91,8 @@ public class Connection implements Runnable {
 
 
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            // 소켓이 닫히니깐 아무것도 안함
+
         } finally {
             this.state.set(State.CLOSED);
             if (readBuffer != null) {

@@ -1,5 +1,6 @@
 package com.minihttp.packet;
 
+import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.protocol.HttpStatus;
 import com.minihttp.packet.protocol.HttpVersion;
 import com.minihttp.packet.structure.HttpBody;
@@ -34,6 +35,10 @@ public class HttpResponse extends HttpPacket {
         this.status = status;
     }
 
+    public void setCloseHeader() {
+        this.header.set(HttpHeaderField.CONNECTION, "close");
+    }
+
     @Override
     protected String startLine() {
         return this.version.token() + " " + this.status.code() + " " + this.status.reason();
@@ -54,11 +59,10 @@ public class HttpResponse extends HttpPacket {
 
     }
 
-    @Override
     protected Map<String, String> generatedHeaders() {
-        if (this.header.contains("Date")) {
+        if (this.header.contains(HttpHeaderField.DATE)) {
             return Map.of();
         }
-        return Map.of("Date", IMF_FIXDATE.format(Instant.now()));
+        return Map.of(HttpHeaderField.DATE.fieldName(), IMF_FIXDATE.format(Instant.now()));
     }
 }

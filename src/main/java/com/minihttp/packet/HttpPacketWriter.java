@@ -1,12 +1,14 @@
 package com.minihttp.packet;
 
+import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.structure.HttpHeader;
+import lombok.NonNull;
+
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * HTTP/1.1 200 OK\r\n
@@ -16,11 +18,12 @@ import java.util.Set;
  */
 public class HttpPacketWriter {
     private static final String CRLF = "\r\n";
-    //TODO CRLF 검증 좀더 확실하게, Content-Length를 기재하도록 수정하기
-    public static void write(HttpResponse response, OutputStream outputStream) throws IOException {
+    public static void write(@NonNull HttpResponse response, @NonNull OutputStream outputStream) throws IOException {
         StringBuilder headerString = new StringBuilder(response.startLine() + CRLF);
-        HttpHeader header = response.header();
+        HttpHeader header = HttpPacketWriter.applyDefaultHeader(response);
+
         Map<String, List<String>> headerMap = header.asMap();
+
         headerMap.forEach(
                 (key, values) -> values.forEach(
                         value -> headerString.append(key).append(": ").append(value).append(CRLF)
@@ -33,6 +36,18 @@ public class HttpPacketWriter {
             outputStream.write(response.body().bytes());
         }
         outputStream.flush();
+    }
+
+    private static HttpHeader applyDefaultHeader(@NonNull HttpResponse response) {
+        HttpHeader header = response.header();
+
+        response.setHeaderFieldIfAbsent(HttpHeaderField.SERVER, "minihttp");
+
+        response.generatedHeaders().forEach(header::set);
+
+        response.applyContentLength();
+
+        return header;
     }
 
 }

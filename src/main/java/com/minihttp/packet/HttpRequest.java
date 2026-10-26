@@ -1,5 +1,6 @@
 package com.minihttp.packet;
 
+import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.protocol.HttpMethod;
 import com.minihttp.packet.protocol.HttpVersion;
 import com.minihttp.packet.structure.HttpBody;
@@ -71,7 +72,7 @@ public class HttpRequest extends HttpPacket {
     }
 
     public boolean keepAlive() {
-        List<String> tokens = this.header.getAll("Connection").stream()
+        List<String> tokens = this.header.getAll(HttpHeaderField.CONNECTION).stream()
                 .flatMap(value -> Arrays.stream(value.split(",")))
                 .map(token -> token.trim().toLowerCase(Locale.ROOT))
                 .toList();
@@ -96,7 +97,7 @@ public class HttpRequest extends HttpPacket {
 
     @Override
     protected void validate() {
-        if (this.version == HttpVersion.HTTP_1_1 && !this.header.contains("Host")) {
+        if (this.version == HttpVersion.HTTP_1_1 && !this.header.contains(HttpHeaderField.HOST)) {
             throw new IllegalStateException("HTTP/1.1 request requires Host header");
         }
     }

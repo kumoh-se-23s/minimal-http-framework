@@ -1,5 +1,6 @@
 package com.minihttp.packet;
 
+import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.protocol.HttpMethod;
 import com.minihttp.packet.protocol.HttpParseException;
 import com.minihttp.packet.protocol.HttpStatus;
@@ -60,7 +61,7 @@ public class HttpPacketReader {
 
         // RFC 9112 3.2에 의해서 Host 필드를 가지지 않은 1.1버전의 헤더는 거부.
         HttpHeader httpHeader = parseHeaders(headerLines);
-        if (httpVersion == HttpVersion.HTTP_1_1 && !httpHeader.contains("Host")) {
+        if (httpVersion == HttpVersion.HTTP_1_1 && !httpHeader.contains(HttpHeaderField.HOST)) {
             throw createParseException(HttpStatus.BAD_REQUEST, "Missing header field: \"Host\"");
         }
 
@@ -170,7 +171,7 @@ public class HttpPacketReader {
         // Transfer-Encoding은 지원안할꺼임 수고.
         // 원래 RFC 9112에 따르면 Transfer-Encoding도 헤더에 같이 있을 수도 있지만,
         // 나는 지원 안할꺼임. 싫어요.
-        if (header.contains("Transfer-Encoding")) {
+        if (header.contains(HttpHeaderField.TRANSFER_ENCODING)) {
             throw createParseException(HttpStatus.NOT_IMPLEMENTED, "Transfer-Encoding is not supported");
         }
 
@@ -238,7 +239,7 @@ public class HttpPacketReader {
     }
 
     private static int parseContentLength(HttpHeader header) {
-        List<String> fieldValues = header.getAll("Content-Length");
+        List<String> fieldValues = header.getAll(HttpHeaderField.CONTENT_LENGTH);
 
         if (fieldValues.isEmpty()) {
             return 0;

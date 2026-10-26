@@ -1,20 +1,16 @@
 package com.minihttp.packet;
 
 import com.minihttp.packet.protocol.ContentType;
+import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.protocol.HttpVersion;
 import com.minihttp.packet.structure.HttpBody;
 import com.minihttp.packet.structure.HttpHeader;
 import lombok.NonNull;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Map;
 import java.util.Optional;
 
 public abstract class HttpPacket {
     private static final String CRLF = "\r\n";
-    private static final String CONNECTION = "Connection";
-    private static final String CONTENT_LENGTH = "Content-Length";
 
     protected HttpVersion version;
     protected final HttpHeader header;
@@ -38,12 +34,26 @@ public abstract class HttpPacket {
         return this.header;
     }
 
-    public void setCloseHeader() {
-        this.header.set(CONNECTION, "close");
+    public void addHeaderField(HttpHeaderField field, String value) {
+        this.header.add(field, value);
     }
 
-    public void setContentLength(int contentLength) {
-        this.header.set(CONTENT_LENGTH, String.valueOf(contentLength));
+    public void setHeaderFieldIfAbsent(HttpHeaderField field, String value) {
+        if (!this.header.contains(field)) {
+            this.header.set(field, value);
+        }
+    }
+
+    public void removeHeaderField(HttpHeaderField field) {
+        this.header.remove(field);
+    }
+
+    public void applyContentLength() {
+        if (this.bodyAllowed()) {
+            this.header.set(HttpHeaderField.CONTENT_LENGTH, String.valueOf(this.body.length()));
+        } else {
+            this.removeHeaderField(HttpHeaderField.CONTENT_LENGTH);
+        }
     }
 
     public HttpBody body() {
@@ -51,11 +61,11 @@ public abstract class HttpPacket {
     }
 
     public Optional<String> contentType() {
-        return this.header.get("Content-Type");
+        return this.header.get(HttpHeaderField.CONTENT_TYPE);
     }
 
     public void contentType(@NonNull ContentType contentType) {
-        this.header.set("Content-Type", contentType.headerValue());
+        this.header.set(HttpHeaderField.CONTENT_TYPE, contentType.headerValue());
     }
 
     protected abstract String startLine();
@@ -65,10 +75,6 @@ public abstract class HttpPacket {
     protected abstract boolean contentLengthRequired();
 
     protected abstract void validate();
-
-    protected Map<String, String> generatedHeaders() {
-        return Map.of();
-    }
 
     private static void writeField(StringBuilder head, String name, String value) {
         head.append(name).append(": ").append(value).append(CRLF);

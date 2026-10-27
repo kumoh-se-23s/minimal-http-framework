@@ -15,6 +15,10 @@ public final class ReadBufferFactory implements GenericFactory<byte[]> {
         this.bufferSize = bufferSize;
     }
 
+    public static ReadBufferFactory createDefaultBufferFactory() {
+        return new ReadBufferFactory(32);
+    }
+
     @Override
     public byte[] create() {
         return new byte[this.bufferSize];

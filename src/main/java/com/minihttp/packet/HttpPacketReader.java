@@ -60,7 +60,7 @@ public class HttpPacketReader {
         HttpVersion httpVersion = HttpVersion.from(requestLine[2]);
 
         // RFC 9112 3.2에 의해서 Host 필드를 가지지 않은 1.1버전의 헤더는 거부.
-        HttpHeader httpHeader = parseHeaders(headerLines);
+        HttpHeader httpHeader = parseHeaders(Arrays.copyOfRange(headerLines, 1, headerLines.length));
         if (httpVersion == HttpVersion.HTTP_1_1 && !httpHeader.contains(HttpHeaderField.HOST)) {
             throw createParseException(HttpStatus.BAD_REQUEST, "Missing header field: \"Host\"");
         }

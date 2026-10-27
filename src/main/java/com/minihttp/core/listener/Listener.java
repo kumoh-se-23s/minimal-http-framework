@@ -25,6 +25,9 @@ import java.util.function.Consumer;
  * </ul>
  */
 public final class Listener {
+    private static final long MIN_BACKOFF_MILLIS = 10;
+    private static final long MAX_BACKOFF_MILLIS = 1000;
+
     private enum State {
         NEW,
         BOUND,
@@ -36,7 +39,7 @@ public final class Listener {
     private final Consumer<Socket> onAccept;
 
     private volatile ServerSocket listenerSocket;
-    private volatile Thread
+    private volatile Thread acceptThread;
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
 
 
@@ -45,12 +48,6 @@ public final class Listener {
         this.onAccept = onAccept;
     }
 
-    /**
-     * ServerSocket을 만들고 bind한다. 아직 accept는 하지 않는다.
-     * bind와 accept 시작을 나눠 두면, 서버가 모든 리스너의 bind 성공을 확인한 뒤에 받기 시작할 수 있다.
-     *
-     * @throws IOException 포트가 이미 사용 중이거나 권한이 없을 때
-     */
     public synchronized void bind() throws IOException {
         if (this.state.get() != State.NEW) {
             throw new IllegalStateException("Listener cannot be bound in state " + this.state.get());
@@ -73,27 +70,63 @@ public final class Listener {
         }
     }
 
-    /** accept 루프를 전용 스레드에서 시작한다. bind() 이후에만 부를 수 있다. */
     public synchronized void startAccepting() {
-        if (this.state.get() == State.BOUND) {
-
+        if (!this.stateCAS(State.BOUND, State.ACCEPTING)) {
+            throw new IllegalStateException("Listener cannot start accepting in state " + this.state.get());
         }
-        // TODO: 플랫폼 스레드 하나에서 accept 루프
-        //  참고: Step06ThreadPerConnectionExample#startAcceptor  (전용 스레드 띄우기)
-        //        Step06ThreadPerConnectionExample#acceptLoop     (닫혀서 난 예외와 진짜 오류 구분)
-        //        Step07KeepAliveExample#acceptLoop               (같은 루프, 받은 소켓을 넘기기만)
-        //  - accept() → onAccept.accept(socket)
-        //  - ServerSocket이 닫혀서 난 예외면 루프 종료
-        //  - 그 외 예외(Too many open files 등)는 잠깐 쉬었다가 다시 시도
-        throw new UnsupportedOperationException("TODO");
+
+        try (ServerSocket listenerSocket = this.listenerSocket) {
+            this.acceptThread = Thread.ofPlatform()
+                    .name("listener:[Port=" + this.listenerSocket.getLocalPort() + "]")
+                    .unstarted(this::acceptLoop);
+            this.acceptThread.start();
+
+        } catch (IOException e) {
+            throw new IllegalStateException("Listener is not bound");
+        }
     }
 
-    /** 실제로 bind된 주소. 포트 0으로 열었을 때 OS가 고른 포트를 알 수 있다. */
+    private void acceptLoop() {
+        long backoffMillis = MIN_BACKOFF_MILLIS;
+
+        while (!this.listenerSocket.isClosed() && !Thread.currentThread().isInterrupted()) {
+            try {
+                this.handOff(this.listenerSocket.accept());
+                backoffMillis = MIN_BACKOFF_MILLIS;
+            } catch (IOException exception) {
+                if (!this.listenerSocket.isClosed()) {
+                    backoffMillis = this.pause(backoffMillis);
+                }
+            }
+        }
+    }
+
+    private void handOff(Socket connectionSocket) {
+        // 전용 소켓을 커넥션 컨슈머에게 전달.
+        try {
+            this.onAccept.accept(connectionSocket);
+        } catch (RuntimeException exception) {
+            this.close();
+        }
+    }
+
+    private long pause(long backoffMillis) {
+        // 연결 실패시 Thread를 잠시 멈추고 backoff 만큼 대기 후 재시도를 위해 다시 제어권 전달.
+        try {
+            Thread.sleep(backoffMillis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+        return Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
+    }
+
     public InetSocketAddress boundAddress() {
-//        this.listenerSocket.
-        // TODO: (InetSocketAddress) serverSocket.getLocalSocketAddress()
-        //  참고: Step00SocketBasicsExample#openServerSocket  (포트 0 → getLocalPort로 실제 포트 확인)
-        throw new UnsupportedOperationException("TODO");
+        try (ServerSocket listenerSocket = this.listenerSocket) {
+            return (InetSocketAddress) listenerSocket.getLocalSocketAddress();
+
+        } catch (IOException e) {
+            throw new IllegalStateException("Listener is not bound");
+        }
     }
 
     public void close() {
@@ -106,11 +139,10 @@ public final class Listener {
         }
     }
 
-    /** accept 스레드가 끝날 때까지 기다린다. */
     public void awaitTermination() throws InterruptedException {
-        // TODO: acceptThread.join()
-        //  참고: Step08GracefulShutdownExample#stopAccepting  (server.close() 뒤 acceptor.join())
-        throw new UnsupportedOperationException("TODO");
+        if (this.acceptThread != null) {
+            this.acceptThread.join();
+        }
     }
 
     public ListenerConfig config() {

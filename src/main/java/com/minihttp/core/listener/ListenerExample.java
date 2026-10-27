@@ -85,33 +85,35 @@ public final class ListenerExample {
     private void acceptLoop(ServerSocket serverSocket) {
         long backoffMillis = MIN_BACKOFF_MILLIS;
 
-        while (!serverSocket.isClosed()) {
-            Socket socket;
+        while (!serverSocket.isClosed() && !Thread.currentThread().isInterrupted()) {
             try {
-                socket = serverSocket.accept();
+                this.handOff(serverSocket.accept());
                 backoffMillis = MIN_BACKOFF_MILLIS;
             } catch (IOException exception) {
                 // close()가 깨운 것인지, 일시적인 오류(Too many open files 등)인지는 예외 타입이 아니라 소켓 상태로 구분한다
-                if (serverSocket.isClosed()) {
-                    return;
+                if (!serverSocket.isClosed()) {
+                    backoffMillis = this.pause(backoffMillis);
                 }
-                try {
-                    Thread.sleep(backoffMillis);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-                backoffMillis = Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
-                continue;
-            }
-
-            try {
-                this.onAccept.accept(socket);
-            } catch (RuntimeException exception) {
-                // 넘겨받은 쪽이 실패했으면 이 소켓은 책임질 주인이 없다
-                closeQuietly(socket);
             }
         }
+    }
+
+    private void handOff(Socket socket) {
+        try {
+            this.onAccept.accept(socket);
+        } catch (RuntimeException exception) {
+            // 넘겨받은 쪽이 실패했으면 이 소켓은 책임질 주인이 없다
+            closeQuietly(socket);
+        }
+    }
+
+    private long pause(long backoffMillis) {
+        try {
+            Thread.sleep(backoffMillis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+        return Math.min(backoffMillis * 2, MAX_BACKOFF_MILLIS);
     }
 
     /** 실제로 bind된 주소. 포트 0으로 열었을 때 OS가 고른 포트를 알 수 있다. */

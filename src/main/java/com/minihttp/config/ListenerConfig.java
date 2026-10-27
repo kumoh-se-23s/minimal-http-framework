@@ -1,5 +1,6 @@
 package com.minihttp.config;
 
+import com.minihttp.packet.protocol.HttpVersion;
 import lombok.NonNull;
 
 import java.net.InetSocketAddress;
@@ -13,7 +14,7 @@ import java.net.InetSocketAddress;
  *                참고: Step00SocketBasicsExample#openServerSocket, Step04TimeoutExample#connectWithTimeout
  *                (accept 전에도 handshake는 끝나고 연결이 큐에서 기다린다)
  */
-public record ListenerConfig(@NonNull InetSocketAddress address, int backlog) {
+public record ListenerConfig(@NonNull ConnectionConfig connectionConfig, @NonNull InetSocketAddress address, int backlog) {
     public static final int DEFAULT_BACKLOG = 50;
 
     public ListenerConfig {
@@ -23,6 +24,10 @@ public record ListenerConfig(@NonNull InetSocketAddress address, int backlog) {
     }
 
     public static ListenerConfig of(int port) {
-        return new ListenerConfig(new InetSocketAddress(port), DEFAULT_BACKLOG);
+        return new ListenerConfig(
+                new ConnectionConfig(32, 100, HttpVersion.HTTP_1_1),
+                new InetSocketAddress(port),
+                DEFAULT_BACKLOG
+        );
     }
 }

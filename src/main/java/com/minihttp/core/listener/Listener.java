@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -35,6 +36,7 @@ public final class Listener {
     private final Consumer<Socket> onAccept;
 
     private volatile ServerSocket listenerSocket;
+    private volatile Thread
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
 
 
@@ -72,7 +74,10 @@ public final class Listener {
     }
 
     /** accept 루프를 전용 스레드에서 시작한다. bind() 이후에만 부를 수 있다. */
-    public void startAccepting() {
+    public synchronized void startAccepting() {
+        if (this.state.get() == State.BOUND) {
+
+        }
         // TODO: 플랫폼 스레드 하나에서 accept 루프
         //  참고: Step06ThreadPerConnectionExample#startAcceptor  (전용 스레드 띄우기)
         //        Step06ThreadPerConnectionExample#acceptLoop     (닫혀서 난 예외와 진짜 오류 구분)

@@ -70,20 +70,25 @@ public final class Listener {
         }
     }
 
-    public synchronized void startAccepting() {
+    public void startAccepting() {
         if (!this.stateCAS(State.BOUND, State.ACCEPTING)) {
             throw new IllegalStateException("Listener cannot start accepting in state " + this.state.get());
         }
 
-        try (ServerSocket listenerSocket = this.listenerSocket) {
-            this.acceptThread = Thread.ofPlatform()
-                    .name("listener:[Port=" + this.listenerSocket.getLocalPort() + "]")
-                    .unstarted(this::acceptLoop);
-            this.acceptThread.start();
+        this.acceptThread = Thread.ofPlatform()
+                                  .name("listener:[Port=" + this.listenerSocket.getLocalPort() + "]")
+                                  .unstarted(this::acceptLoop);
+        this.acceptThread.start();
 
-        } catch (IOException e) {
-            throw new IllegalStateException("Listener is not bound");
-        }
+//        try (ServerSocket listenerSocket = this.listenerSocket) {
+//            this.acceptThread = Thread.ofPlatform()
+//                    .name("listener:[Port=" + this.listenerSocket.getLocalPort() + "]")
+//                    .unstarted(this::acceptLoop);
+//            this.acceptThread.start();
+//
+//        } catch (IOException e) {
+//            throw new IllegalStateException("Listener is not bound");
+//        }
     }
 
     private void acceptLoop() {
@@ -101,12 +106,12 @@ public final class Listener {
         }
     }
 
-    private void handOff(Socket connectionSocket) {
+    private void handOff(Socket connectionSocket) throws IOException {
         // 전용 소켓을 커넥션 컨슈머에게 전달.
         try {
             this.onAccept.accept(connectionSocket);
         } catch (RuntimeException exception) {
-            this.close();
+            connectionSocket.close();
         }
     }
 
@@ -121,16 +126,15 @@ public final class Listener {
     }
 
     public InetSocketAddress boundAddress() {
-        try (ServerSocket listenerSocket = this.listenerSocket) {
-            return (InetSocketAddress) listenerSocket.getLocalSocketAddress();
-
-        } catch (IOException e) {
+        ServerSocket listenerSocket = this.listenerSocket;
+        if (listenerSocket == null) {
             throw new IllegalStateException("Listener is not bound");
         }
+        return (InetSocketAddress) listenerSocket.getLocalSocketAddress();
     }
 
     public void close() {
-        if (this.state.getAndSet(State.CLOSED) != State.CLOSED) {
+        if (this.state.getAndSet(State.CLOSED) != State.CLOSED && this.listenerSocket != null) {
             try {
                 this.listenerSocket.close();
             } catch (IOException e) {

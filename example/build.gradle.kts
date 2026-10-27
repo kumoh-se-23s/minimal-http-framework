@@ -16,6 +16,11 @@ repositories {
 }
 
 dependencies {
+    // routing_example이 루트 모듈의 Handler, packet, HttpServerExample, ServerConfig를 쓴다
+    implementation(project(":"))
+    compileOnly("org.projectlombok:lombok:1.18.48")
+    annotationProcessor("org.projectlombok:lombok:1.18.48")
+
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

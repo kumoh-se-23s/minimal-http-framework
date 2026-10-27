@@ -3,7 +3,6 @@ package com.minihttp.core.handler;
 import com.minihttp.packet.HttpRequest;
 import com.minihttp.packet.HttpResponse;
 
-import java.util.Optional;
 
 /**
  * 요청 하나를 받아 응답 하나를 만든다. 서버 코어와 애플리케이션(라우팅, 비즈니스 로직)의 경계.
@@ -15,7 +14,8 @@ import java.util.Optional;
 @FunctionalInterface
 public interface Handler {
     /**
+     * @return 이 요청에 대한 응답. null이면 안 된다 (처리할 경로가 없으면 404 같은 응답을 직접 만든다).
      * @throws Exception 처리 중 실패. Connection이 잡아서 500 응답으로 바꾼다.
      */
-    Optional<HttpResponse> handle(HttpRequest request) throws Exception;
+    HttpResponse handle(HttpRequest request) throws Exception;
 }

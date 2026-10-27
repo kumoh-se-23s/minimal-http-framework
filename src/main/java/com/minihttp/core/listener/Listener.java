@@ -7,23 +7,10 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-/**
- * bind 주소 하나를 맡는다. ServerSocket을 소유하고 accept 루프를 돌린다.
- *
- * <p>받은 소켓은 {@code onAccept}로 넘기기만 한다. HTTP도, 서버의 공유 자원(풀, 연결 수 제한)도 모른다.
- *
- * <p>참고 예제 (example 모듈 {@code com.minihttp.example.socket}):
- * <ul>
- *   <li>Step00SocketBasicsExample#openServerSocket — ServerSocket 생성자 인자(port, backlog, 주소)</li>
- *   <li>Step05SocketOptionsExample#configureServerSocket — bind 전에 걸어야 하는 옵션</li>
- *   <li>Step06ThreadPerConnectionExample#startAcceptor, #acceptLoop — accept 전용 스레드와 루프</li>
- *   <li>Step08GracefulShutdownExample#stopAccepting — close()로 accept를 깨워 루프 끝내기</li>
- * </ul>
- */
+
 public final class Listener {
     private static final long MIN_BACKOFF_MILLIS = 10;
     private static final long MAX_BACKOFF_MILLIS = 1000;
@@ -35,17 +22,29 @@ public final class Listener {
         CLOSED
     }
 
-    private final ListenerConfig config;
-    private final Consumer<Socket> onAccept;
+    private final InetSocketAddress listenAddress;
+    private final int backlog;
+    private final Consumer<Socket> socketConsumer;
 
     private volatile ServerSocket listenerSocket;
     private volatile Thread acceptThread;
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
 
+    private Listener(@NonNull Consumer<Socket> socketConsumer, @NonNull InetSocketAddress listenAddress, int backlog) {
+        this.socketConsumer = socketConsumer;
+        this.listenAddress = listenAddress;
+        this.backlog = backlog;
+    }
 
-    public Listener(@NonNull ListenerConfig config, @NonNull Consumer<Socket> onAccept) {
-        this.config = config;
-        this.onAccept = onAccept;
+    public static Listener createListener(@NonNull Consumer<Socket> socketConsumer,
+                                           @NonNull InetSocketAddress listenAddress,
+                                           int backlog) {
+
+        return new Listener(socketConsumer, listenAddress, backlog);
+    }
+
+    public static Listener createListener(@NonNull Consumer<Socket> socketConsumer, @NonNull ListenerConfig config) {
+        return new Listener(socketConsumer, config.address(), config.backlog());
     }
 
     public synchronized void bind() throws IOException {
@@ -56,7 +55,7 @@ public final class Listener {
         ServerSocket serverSocket = new ServerSocket();
         try {
             serverSocket.setReuseAddress(true);
-            serverSocket.bind(this.config.address(), this.config.backlog());
+            serverSocket.bind(this.listenAddress, this.backlog);
             this.listenerSocket = serverSocket;
 
         } catch (IOException exception) {
@@ -109,7 +108,7 @@ public final class Listener {
     private void handOff(Socket connectionSocket) throws IOException {
         // 전용 소켓을 커넥션 컨슈머에게 전달.
         try {
-            this.onAccept.accept(connectionSocket);
+            this.socketConsumer.accept(connectionSocket);
         } catch (RuntimeException exception) {
             connectionSocket.close();
         }
@@ -147,10 +146,6 @@ public final class Listener {
         if (this.acceptThread != null) {
             this.acceptThread.join();
         }
-    }
-
-    public ListenerConfig config() {
-        return this.config;
     }
 
     private boolean stateCAS(State expectedValue, State newValue) {

@@ -7,6 +7,7 @@ import com.minihttp.packet.*;
 import com.minihttp.packet.protocol.ContentType;
 import com.minihttp.packet.protocol.HttpParseException;
 import com.minihttp.packet.protocol.HttpStatus;
+import com.minihttp.packet.protocol.HttpVersion;
 import com.minihttp.packet.structure.DefaultHttpBody;
 import com.minihttp.packet.structure.DefaultHttpHeader;
 import lombok.NonNull;
@@ -26,24 +27,41 @@ public class Connection implements Runnable {
         BUSY,
         CLOSED
     }
-    private final ConnectionConfig config;
     private final Socket socket;
     private final Handler handler;
     private final Pool<byte[]> bufferPool;
     private final Duration idleTimeout;
+    private final int maxRequestByConnection;
 
     private final AtomicReference<State> state = new AtomicReference<>(State.IDLE);
 
-    public Connection(@NonNull ConnectionConfig config,
-                      @NonNull Socket socket,
-                      @NonNull Handler handler,
-                      @NonNull Pool<byte[]> bufferPool,
-                      @NonNull Duration idleTimeout) {
-        this.config = config;
+    private Connection(@NonNull Socket socket,
+                       @NonNull Handler handler,
+                       @NonNull Pool<byte[]> bufferPool,
+                       @NonNull Duration idleTimeout,
+                       int maxRequestByConnection) {
+
         this.socket = socket;
         this.handler = handler;
         this.bufferPool = bufferPool;
         this.idleTimeout = idleTimeout;
+        this.maxRequestByConnection = maxRequestByConnection;
+    }
+
+    public static Connection createConnection(@NonNull Socket socket,
+                                              @NonNull Handler handler,
+                                              @NonNull Pool<byte[]> bufferPool,
+                                              @NonNull Duration idleTimeout,
+                                              int maxRequestByConnection) {
+
+        return new Connection(socket, handler, bufferPool, idleTimeout, maxRequestByConnection);
+    }
+
+    public static Connection createConnection(@NonNull Socket socket,
+                                              @NonNull Handler handler,
+                                              @NonNull Pool<byte[]> bufferPool,
+                                              @NonNull ConnectionConfig config) {
+        return new Connection(socket, handler, bufferPool, config.idleTimeout(), config.maxRequestByConnection());
     }
 
     @Override
@@ -70,7 +88,7 @@ public class Connection implements Runnable {
             HttpPacketReader packetReader = new HttpPacketReader(this.socket.getInputStream(), readBuffer);
 
             try {
-                for (int handled = 0; handled < this.config.maxRequestByConnection(); handled++) {
+                for (int handled = 0; handled < this.maxRequestByConnection; handled++) {
                     if (!packetReader.awaitRequest() || !this.stateCAS(State.IDLE, State.BUSY)) {
                         return;
                     }
@@ -103,7 +121,7 @@ public class Connection implements Runnable {
 
     private HttpResponse createErrorResponse(HttpStatus status, boolean withClose) {
         HttpResponse errorResponse = new HttpResponse(
-                this.config.connectionVersion(),
+                HttpVersion.HTTP_1_1,
                 new DefaultHttpHeader(),
                 new DefaultHttpBody(status.reason().getBytes(StandardCharsets.UTF_8)),
                 status
@@ -118,8 +136,10 @@ public class Connection implements Runnable {
     private HttpResponse respond(HttpRequest request) {
         HttpResponse response;
         try {
-            response = this.handler.handle(request)
-                                   .orElseThrow(() -> new IllegalStateException("Handler returned empty response!"));
+            response = this.handler.handle(request);
+            if (response == null) {
+                throw new IllegalStateException("Handler returned null response!");
+            }
 
         } catch (Exception e) {
             response = this.createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, false);

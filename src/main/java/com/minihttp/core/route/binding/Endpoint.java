@@ -1,5 +1,6 @@
 package com.minihttp.core.route.binding;
 
+import com.minihttp.core.route.BaseRouter;
 import com.minihttp.core.route.annotation.HttpMapping;
 import com.minihttp.core.route.annotation.Path;
 import com.minihttp.core.route.annotation.Query;
@@ -13,6 +14,7 @@ import java.lang.reflect.Type;
 import java.util.*;
 
 public record Endpoint(
+        BaseRouter router,
         PathTemplate pathTemplate,
         HttpMethod httpMethod,
         Map<String, Parameter> pathParamMap,
@@ -20,7 +22,7 @@ public record Endpoint(
         Method handler,
         Type handlerReturnType
 ) {
-    public static Optional<Endpoint> from(Method handler) throws ReflectiveOperationException {
+    public static Optional<Endpoint> from(BaseRouter router, Method handler) throws ReflectiveOperationException {
         for (Annotation meta : handler.getAnnotations()) {
             Optional<HttpMapping> maybeHttpMapping = Endpoint.getHttpMapping(meta);
 
@@ -32,6 +34,7 @@ public record Endpoint(
             HttpMethod httpMethod = maybeHttpMapping.get().value();
             return Optional.of(
                     new Endpoint(
+                            router,
                             PathTemplate.create(path),
                             httpMethod,
                             Endpoint.getPathParamMap(path, handler),

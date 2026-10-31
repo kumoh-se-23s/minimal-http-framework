@@ -1,55 +1,70 @@
 package com.minihttp.core.route.binding;
 
 import com.minihttp.core.route.BaseRouter;
+import com.minihttp.core.route.template.PathTemplate;
 
 import java.lang.reflect.Method;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 public final class EndpointScanner {
-    private final Class<? extends BaseRouter> routerClass;
-    private final Map<String, Endpoint> routeMap;
+    private final BaseRouter router;
+    private final List<Endpoint> endpoints;
 
-    private EndpointScanner(Class<? extends BaseRouter> routerClass) {
-        this.routerClass = routerClass;
+    private EndpointScanner(BaseRouter router) {
+        this.router = router;
         try {
-            this.routeMap = this.readRouteMap();
+            this.endpoints = this.readEndpoints();
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException(
-                    "Failed to read routes from router class: " + routerClass.getName(),
+                    "Failed to read routes from router class: " + router.getClass().getName(),
                     exception
             );
         }
     }
 
-    public static EndpointScanner create(Class<? extends BaseRouter> routerClass) {
-        return new EndpointScanner(routerClass);
+    public static EndpointScanner create(BaseRouter router) {
+        return new EndpointScanner(router);
     }
 
-    public Optional<Endpoint> getEndpoint(String path) {
-        return Optional.ofNullable(this.routeMap.get(path));
-    }
+    private List<Endpoint> readEndpoints() throws ReflectiveOperationException {
+        List<Endpoint> endpoints = new ArrayList<>();
+        for (Method endpointMethod : this.router.getClass().getDeclaredMethods()) {
+            Optional<Endpoint> maybeEndpoint = Endpoint.from(this.router, endpointMethod);
 
-    private Map<String, Endpoint> readRouteMap() throws ReflectiveOperationException {
-        Map<String, Endpoint> routeMap = new HashMap<>();
-        for (Method endpointMethod : this.routerClass.getDeclaredMethods()) {
-            Optional<Endpoint> maybeEndpoint = Endpoint.from(endpointMethod);
+            if (maybeEndpoint.isEmpty()) {
+                continue;
+            }
 
-            maybeEndpoint.ifPresent(
-                    endpoint -> routeMap.putIfAbsent(endpoint.path(), endpoint)
-            );
+            Endpoint endpoint = maybeEndpoint.get();
+            EndpointScanner.validateNotDuplicated(endpoints, endpoint);
+            endpoints.add(endpoint);
         }
 
-        return routeMap;
+        endpoints.sort(Comparator.comparing(Endpoint::pathTemplate));
+        return List.copyOf(endpoints);
     }
 
+    private static void validateNotDuplicated(List<Endpoint> endpoints, Endpoint newEndpoint) {
+        for (Endpoint endpoint : endpoints) {
+            boolean isSameMethod = endpoint.httpMethod() == newEndpoint.httpMethod();
+            boolean isSamePath = PathTemplate.isSamePath(endpoint.pathTemplate(), newEndpoint.pathTemplate());
 
-    public Class<? extends BaseRouter> getRouterClass() {
-        return routerClass;
+            if (isSameMethod && isSamePath) {
+                throw new IllegalStateException(
+                        "Duplicate endpoint " + newEndpoint.httpMethod() + " " + newEndpoint.handler()
+                                + " conflicts with " + endpoint.handler());
+            }
+        }
     }
 
-    public Map<String, Endpoint> getRouteMap() {
-        return routeMap;
+    public BaseRouter getRouter() {
+        return this.router;
+    }
+
+    public List<Endpoint> getEndpoints() {
+        return this.endpoints;
     }
 }

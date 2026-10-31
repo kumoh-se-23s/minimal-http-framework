@@ -2,6 +2,7 @@ package com.minihttp.core.route.binding;
 
 import com.minihttp.core.route.BaseRouter;
 import com.minihttp.core.route.template.PathTemplate;
+import lombok.Getter;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -9,6 +10,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
+@Getter
 public final class EndpointScanner {
     private final BaseRouter router;
     private final List<Endpoint> endpoints;
@@ -60,11 +62,4 @@ public final class EndpointScanner {
         }
     }
 
-    public BaseRouter getRouter() {
-        return this.router;
-    }
-
-    public List<Endpoint> getEndpoints() {
-        return this.endpoints;
-    }
 }

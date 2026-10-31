@@ -2,7 +2,6 @@ package com.minihttp.core.connection;
 
 import com.minihttp.config.ConnectionConfig;
 import com.minihttp.core.handler.Handler;
-import com.minihttp.core.route.exception.HttpStatusException;
 import com.minihttp.core.utils.Pool;
 import com.minihttp.packet.*;
 import com.minihttp.packet.protocol.ContentType;
@@ -142,9 +141,6 @@ public class Connection implements Runnable {
                 throw new IllegalStateException("Handler returned null response!");
             }
 
-        } catch (HttpStatusException exception) {
-            response = this.createErrorResponse(exception.status(), false);
-            exception.headers().forEach(response::addHeaderField);
         } catch (Exception e) {
             response = this.createErrorResponse(HttpStatus.INTERNAL_SERVER_ERROR, false);
         }

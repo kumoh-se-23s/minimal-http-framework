@@ -9,10 +9,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MethodNotAllowedException extends HttpStatusException {
-    public MethodNotAllowedException(HttpMethod method, String path, Set<HttpMethod> allowedMethods) {
+    // FastAPI와 같은 응답: 405 {"detail":"Method Not Allowed"} + Allow 헤더
+    public MethodNotAllowedException(Set<HttpMethod> allowedMethods) {
         super(
                 HttpStatus.METHOD_NOT_ALLOWED,
-                method + " is not allowed for " + path,
+                HttpStatus.METHOD_NOT_ALLOWED.reason(),
                 Map.of(HttpHeaderField.ALLOW, MethodNotAllowedException.toAllowValue(allowedMethods))
         );
     }

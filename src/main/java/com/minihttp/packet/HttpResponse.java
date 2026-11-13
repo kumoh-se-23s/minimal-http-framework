@@ -4,6 +4,8 @@ import com.minihttp.packet.protocol.HttpHeaderField;
 import com.minihttp.packet.protocol.HttpStatus;
 import com.minihttp.packet.protocol.HttpVersion;
 import com.minihttp.packet.structure.HttpBody;
+import com.minihttp.packet.structure.DefaultHttpBody;
+import com.minihttp.packet.structure.DefaultHttpHeader;
 import com.minihttp.packet.structure.HttpHeader;
 import lombok.NonNull;
 
@@ -27,39 +29,43 @@ public class HttpResponse extends HttpPacket {
         this.status = status;
     }
 
-    public HttpStatus status() {
+    public HttpResponse(@NonNull HttpStatus status) {
+        this(HttpVersion.HTTP_1_1, new DefaultHttpHeader(), new DefaultHttpBody(), status);
+    }
+
+    public final HttpStatus status() {
         return this.status;
     }
 
-    public void status(@NonNull HttpStatus status) {
+    public final void status(@NonNull HttpStatus status) {
         this.status = status;
     }
 
-    public void setCloseHeader() {
+    public final void setCloseHeader() {
         this.header.set(HttpHeaderField.CONNECTION, "close");
     }
 
     @Override
-    protected String startLine() {
+    protected final String startLine() {
         return this.version.token() + " " + this.status.code() + " " + this.status.reason();
     }
 
     @Override
-    protected boolean bodyAllowed() {
+    protected final boolean bodyAllowed() {
         return this.status.permitsBody();
     }
 
     @Override
-    protected boolean contentLengthRequired() {
+    protected final boolean contentLengthRequired() {
         return this.bodyAllowed();
     }
 
     @Override
-    protected void validate() {
+    protected final void validate() {
 
     }
 
-    protected Map<String, String> generatedHeaders() {
+    protected final Map<String, String> generatedHeaders() {
         if (this.header.contains(HttpHeaderField.DATE)) {
             return Map.of();
         }

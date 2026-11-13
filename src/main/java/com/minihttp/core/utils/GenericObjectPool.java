@@ -33,9 +33,12 @@ public final class GenericObjectPool<T> implements Pool<T> {
         this(manualPool, size, size * 2, factorySupplier);
     }
 
-    private GenericObjectPool(List<T> manualPool, int size, int maxSize, Supplier<GenericFactory<T>> factorySupplier) {
+    public GenericObjectPool(List<T> manualPool, int size, int maxSize, Supplier<GenericFactory<T>> factorySupplier) {
         if (size <= 0) {
             throw new IllegalArgumentException("size must be positive: " + size);
+        }
+        if (maxSize < size) {
+            throw new IllegalArgumentException("maxSize must not be smaller than size: " + maxSize + " < " + size);
         }
         this.size = size;
         this.maxSize = maxSize;

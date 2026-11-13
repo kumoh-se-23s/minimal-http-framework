@@ -1,98 +1,141 @@
 package com.minihttp.core.route.binding;
 
+import com.minihttp.convert.ScalarConverter;
 import com.minihttp.core.route.BaseRouter;
+import com.minihttp.core.route.RoutePaths;
 import com.minihttp.core.route.annotation.HttpMapping;
-import com.minihttp.core.route.annotation.Path;
-import com.minihttp.core.route.annotation.Query;
 import com.minihttp.core.route.template.PathTemplate;
 import com.minihttp.packet.protocol.HttpMethod;
+import com.minihttp.packet.protocol.HttpStatus;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.lang.reflect.Type;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 public record Endpoint(
         BaseRouter router,
         PathTemplate pathTemplate,
         HttpMethod httpMethod,
-        Map<String, Parameter> pathParamMap,
-        Map<String, Parameter> queryParamMap,
         Method handler,
-        Type handlerReturnType
+        HttpStatus status,
+        List<ParameterSpec> parameters
 ) {
-    public static Optional<Endpoint> from(BaseRouter router, Method handler) throws ReflectiveOperationException {
-        for (Annotation meta : handler.getAnnotations()) {
-            Optional<HttpMapping> maybeHttpMapping = Endpoint.getHttpMapping(meta);
+    public Endpoint {
+        parameters = List.copyOf(parameters);
+    }
 
-            if (maybeHttpMapping.isEmpty()) {
+    public static Optional<Endpoint> from(BaseRouter router, Method handler) throws ReflectiveOperationException {
+        for (Annotation annotation : handler.getAnnotations()) {
+            HttpMapping httpMapping = annotation.annotationType().getAnnotation(HttpMapping.class);
+
+            if (httpMapping == null) {
                 continue;
             }
 
-            String path = meta.annotationType().getMethod("value").invoke(meta).toString();
-            HttpMethod httpMethod = maybeHttpMapping.get().value();
-            return Optional.of(
-                    new Endpoint(
-                            router,
-                            PathTemplate.create(path),
-                            httpMethod,
-                            Endpoint.getPathParamMap(path, handler),
-                            Endpoint.getQueryParamMap(handler),
-                            handler,
-                            handler.getGenericReturnType()
-                    )
-            );
+            String path = (String) annotation.annotationType().getMethod("value").invoke(annotation);
+            HttpStatus status = (HttpStatus) annotation.annotationType().getMethod("status").invoke(annotation);
+            PathTemplate pathTemplate = PathTemplate.create(RoutePaths.join(router.prefix(), path));
+
+            handler.setAccessible(true);
+            return Optional.of(new Endpoint(
+                    router,
+                    pathTemplate,
+                    httpMapping.value(),
+                    handler,
+                    status,
+                    Endpoint.readParameters(handler, pathTemplate)
+            ));
         }
 
         return Optional.empty();
     }
 
-    private static Optional<HttpMapping> getHttpMapping(Annotation annotation) {
-        return Optional.ofNullable(annotation.annotationType().getAnnotation(HttpMapping.class));
+    public String describe() {
+        return this.httpMethod + " " + this.pathTemplate + " → "
+                + this.handler.getDeclaringClass().getSimpleName() + "#" + this.handler.getName();
     }
 
+    private static List<ParameterSpec> readParameters(Method handler, PathTemplate pathTemplate) {
+        List<String> pathVariableNames = pathTemplate.variableNames();
+        Set<String> uniquePathVariableNames = new HashSet<>(pathVariableNames);
 
-
-    private static Map<String, Parameter> getPathParamMap(String path, Method handler) {
-        List<String> pathVars = PathTemplate.extractPathVariableNames(path);
-        Set<String> templateNames = new HashSet<>(pathVars);
-
-        if (templateNames.size() != pathVars.size()) {
-            throw new IllegalStateException("Duplicate path variables in " + path + " of " + handler);
+        if (uniquePathVariableNames.size() != pathVariableNames.size()) {
+            throw new IllegalStateException("Duplicate path variables in " + pathTemplate + " of " + handler);
         }
 
-        Map<String, Parameter> pathParamMap = new HashMap<>();
+        List<ParameterSpec> parameters = new ArrayList<>();
         for (Parameter parameter : handler.getParameters()) {
-            if (parameter.isAnnotationPresent(Path.class)) {
-                pathParamMap.put(parameter.getName(), parameter);
-            }
+            parameters.add(ParameterSpec.from(handler, parameter, uniquePathVariableNames));
         }
 
-        if (!templateNames.equals(pathParamMap.keySet())) {
-            throw new IllegalStateException(
-                    "Path variables " + templateNames + " do not match @PathParam parameters "
-                            + pathParamMap.keySet() + " in " + handler);
-        }
-
-        return Map.copyOf(pathParamMap);
+        Endpoint.validatePathParameters(handler, uniquePathVariableNames, parameters);
+        Endpoint.validateSingleBody(handler, parameters);
+        Endpoint.validateValueTypes(handler, parameters);
+        return parameters;
     }
 
-    private static Map<String, Parameter> getQueryParamMap(Method handler) {
-        Map<String, Parameter> queryParamMap = new HashMap<>();
-        for (Parameter parameter : handler.getParameters()) {
-            if (!parameter.isAnnotationPresent(Query.class)) {
+    private static void validatePathParameters(Method handler, Set<String> pathVariableNames, List<ParameterSpec> parameters) {
+        Set<String> boundPathNames = new HashSet<>();
+
+        for (ParameterSpec parameter : parameters) {
+            if (parameter.source() != ParameterSource.PATH) {
                 continue;
             }
 
-            if (parameter.isAnnotationPresent(Path.class)) {
+            if (!pathVariableNames.contains(parameter.name())) {
                 throw new IllegalStateException(
-                        "Parameter " + parameter.getName() + " cannot be both @PathParam and @QueryParam in " + handler);
+                        "Path parameter '" + parameter.name() + "' is not in the path " + pathVariableNames + " of " + handler);
             }
 
-            queryParamMap.put(parameter.getName(), parameter);
+            if (!boundPathNames.add(parameter.name())) {
+                throw new IllegalStateException("Path variable '" + parameter.name() + "' is bound twice in " + handler);
+            }
+
+            if (parameter.optional()) {
+                throw new IllegalStateException(
+                        "Path parameter '" + parameter.name() + "' cannot be Optional because it is always present in " + handler);
+            }
         }
 
-        return Map.copyOf(queryParamMap);
+        if (!boundPathNames.equals(pathVariableNames)) {
+            Set<String> unboundNames = new HashSet<>(pathVariableNames);
+            unboundNames.removeAll(boundPathNames);
+            throw new IllegalStateException("Path variables " + unboundNames + " have no matching parameter in " + handler);
+        }
+    }
+
+    private static void validateSingleBody(Method handler, List<ParameterSpec> parameters) {
+        long bodyCount = parameters.stream()
+                                   .filter(parameter -> parameter.source() == ParameterSource.BODY)
+                                   .count();
+
+        if (bodyCount > 1) {
+            throw new IllegalStateException("Only one body parameter is allowed, but " + bodyCount + " found in " + handler);
+        }
+    }
+
+    private static void validateValueTypes(Method handler, List<ParameterSpec> parameters) {
+        for (ParameterSpec parameter : parameters) {
+            switch (parameter.source()) {
+                case PATH -> {
+                    if (!ScalarConverter.supports(parameter.rawValueType())) {
+                        throw new IllegalStateException(
+                                "Path parameter '" + parameter.name() + "' must be a single value type in " + handler);
+                    }
+                }
+                case QUERY, HEADER -> {
+                    if (!ParameterSpec.isQueryable(parameter.valueType())) {
+                        throw new IllegalStateException(
+                                "Parameter '" + parameter.name() + "' of type " + parameter.valueType().getTypeName()
+                                        + " cannot be read from " + parameter.source().locationName() + " in " + handler);
+                    }
+                }
+            }
+        }
     }
 }

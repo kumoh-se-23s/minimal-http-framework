@@ -61,7 +61,7 @@ class ListenerTest {
     }
 
     private Listener listener(int port, Consumer<Socket> onAccept) {
-        Listener listener = new Listener(new ListenerConfig(new InetSocketAddress(LOOPBACK, port), 50), onAccept);
+        Listener listener = Listener.createListener(onAccept, new ListenerConfig(new InetSocketAddress(LOOPBACK, port), 50));
         this.listeners.add(listener);
         return listener;
     }

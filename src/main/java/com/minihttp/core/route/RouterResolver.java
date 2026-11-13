@@ -4,6 +4,7 @@ import com.minihttp.core.route.binding.Endpoint;
 import com.minihttp.core.route.binding.EndpointScanner;
 import com.minihttp.core.route.exception.MethodNotAllowedException;
 import com.minihttp.core.route.exception.RouteNotFoundException;
+import com.minihttp.core.route.template.PathTemplate;
 import com.minihttp.packet.HttpRequest;
 import com.minihttp.packet.protocol.HttpMethod;
 
@@ -15,13 +16,17 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+
 public final class RouterResolver {
     private final List<Endpoint> endpoints;
 
     private RouterResolver(List<BaseRouter> routers) {
         List<Endpoint> endpoints = new ArrayList<>();
         for (BaseRouter router : routers) {
-            endpoints.addAll(EndpointScanner.create(router).getEndpoints());
+            for (Endpoint endpoint : EndpointScanner.create(router).getEndpoints()) {
+                RouterResolver.validateNotDuplicated(endpoints, endpoint);
+                endpoints.add(endpoint);
+            }
         }
 
         endpoints.sort(Comparator.comparing(Endpoint::pathTemplate));
@@ -30,6 +35,10 @@ public final class RouterResolver {
 
     public static RouterResolver create(List<BaseRouter> routers) {
         return new RouterResolver(routers);
+    }
+
+    public List<Endpoint> endpoints() {
+        return this.endpoints;
     }
 
     public Endpoint resolve(HttpRequest request) {
@@ -52,9 +61,21 @@ public final class RouterResolver {
         }
 
         if (allowedMethods.isEmpty()) {
-            throw new RouteNotFoundException(request.path());
+            throw new RouteNotFoundException();
         }
 
-        throw new MethodNotAllowedException(request.method(), request.path(), allowedMethods);
+        throw new MethodNotAllowedException(allowedMethods);
+    }
+
+    private static void validateNotDuplicated(List<Endpoint> endpoints, Endpoint newEndpoint) {
+        for (Endpoint endpoint : endpoints) {
+            boolean isSameMethod = endpoint.httpMethod() == newEndpoint.httpMethod();
+            boolean isSamePath = PathTemplate.isSamePath(endpoint.pathTemplate(), newEndpoint.pathTemplate());
+
+            if (isSameMethod && isSamePath) {
+                throw new IllegalStateException(
+                        "Duplicate endpoint " + newEndpoint.describe() + " conflicts with " + endpoint.describe());
+            }
+        }
     }
 }

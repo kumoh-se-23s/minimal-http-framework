@@ -1,12 +1,10 @@
 package com.minihttp.core.route.binding;
 
 import com.minihttp.core.route.BaseRouter;
-import com.minihttp.core.route.template.PathTemplate;
 import lombok.Getter;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,26 +38,9 @@ public final class EndpointScanner {
                 continue;
             }
 
-            Endpoint endpoint = maybeEndpoint.get();
-            EndpointScanner.validateNotDuplicated(endpoints, endpoint);
-            endpoints.add(endpoint);
+            endpoints.add(maybeEndpoint.get());
         }
 
-        endpoints.sort(Comparator.comparing(Endpoint::pathTemplate));
         return List.copyOf(endpoints);
     }
-
-    private static void validateNotDuplicated(List<Endpoint> endpoints, Endpoint newEndpoint) {
-        for (Endpoint endpoint : endpoints) {
-            boolean isSameMethod = endpoint.httpMethod() == newEndpoint.httpMethod();
-            boolean isSamePath = PathTemplate.isSamePath(endpoint.pathTemplate(), newEndpoint.pathTemplate());
-
-            if (isSameMethod && isSamePath) {
-                throw new IllegalStateException(
-                        "Duplicate endpoint " + newEndpoint.httpMethod() + " " + newEndpoint.handler()
-                                + " conflicts with " + endpoint.handler());
-            }
-        }
-    }
-
 }

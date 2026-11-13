@@ -22,33 +22,33 @@ public abstract class HttpPacket {
         this.body = body;
     }
 
-    public HttpVersion version() {
+    public final HttpVersion version() {
         return this.version;
     }
 
-    public void version(@NonNull HttpVersion version) {
+    public final void version(@NonNull HttpVersion version) {
         this.version = version;
     }
 
-    public HttpHeader header() {
+    public final HttpHeader header() {
         return this.header;
     }
 
-    public void addHeaderField(HttpHeaderField field, String value) {
+    public final void addHeaderField(HttpHeaderField field, String value) {
         this.header.add(field, value);
     }
 
-    public void setHeaderFieldIfAbsent(HttpHeaderField field, String value) {
+    public final void setHeaderFieldIfAbsent(HttpHeaderField field, String value) {
         if (!this.header.contains(field)) {
             this.header.set(field, value);
         }
     }
 
-    public void removeHeaderField(HttpHeaderField field) {
+    public final void removeHeaderField(HttpHeaderField field) {
         this.header.remove(field);
     }
 
-    public void applyContentLength() {
+    public final void applyContentLength() {
         if (this.bodyAllowed()) {
             this.header.set(HttpHeaderField.CONTENT_LENGTH, String.valueOf(this.body.length()));
         } else {
@@ -56,15 +56,15 @@ public abstract class HttpPacket {
         }
     }
 
-    public HttpBody body() {
+    public final HttpBody body() {
         return this.body;
     }
 
-    public Optional<String> contentType() {
+    public final Optional<String> contentType() {
         return this.header.get(HttpHeaderField.CONTENT_TYPE);
     }
 
-    public void contentType(@NonNull ContentType contentType) {
+    public final void contentType(@NonNull ContentType contentType) {
         this.header.set(HttpHeaderField.CONTENT_TYPE, contentType.headerValue());
     }
 

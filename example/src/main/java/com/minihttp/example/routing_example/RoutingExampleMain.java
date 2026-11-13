@@ -1,7 +1,7 @@
 package com.minihttp.example.routing_example;
 
 import com.minihttp.config.ServerConfig;
-import com.minihttp.core.HttpServerExample;
+import com.minihttp.core.HttpServer;
 import com.minihttp.example.routing_example.annotation.Body;
 import com.minihttp.example.routing_example.annotation.Delete;
 import com.minihttp.example.routing_example.annotation.Get;
@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
  *           @self.get("/get-all")                         @Get("/get-all")
  *           async def get_all(service = Depends(...))     public String getAll()  (this.service 사용)
  *
- *   uvicorn.run("app:UserAPI", port=...)          new HttpServerExample(config, app.build())
+ *   uvicorn.run("app:UserAPI", port=...)          new HttpServer(config, app.build())
  * </pre>
  *
  * 띄운 뒤 해 볼 것:
@@ -174,7 +174,7 @@ public final class RoutingExampleMain {
         ExampleApplication app = new ExampleApplication(new UserService());
 
         // build() 이후로 라우트는 고정되고, 서버 스레드들은 불변 Handler만 본다
-        HttpServerExample server = new HttpServerExample(config, app.build());
+        HttpServer server = new HttpServer(config, app.build());
         server.start();
 
         System.out.println("listening on " + server.listeners().getFirst().boundAddress());

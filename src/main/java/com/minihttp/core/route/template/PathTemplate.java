@@ -43,6 +43,22 @@ public class PathTemplate implements Comparable<PathTemplate>{
         return new PathTemplate(path, DEFAULT_SEPARATOR);
     }
 
+    public String path() {
+        return this.path;
+    }
+
+    public List<String> variableNames() {
+        return this.segments.stream()
+                            .filter(segment -> segment.segmentType() == SegmentType.VARIABLE)
+                            .map(Segment::variableName)
+                            .toList();
+    }
+
+    @Override
+    public String toString() {
+        return this.path;
+    }
+
     public static List<String> extractPathVariableNames(String path) {
         return PATH_VARIABLE.matcher(path)
                             .results()

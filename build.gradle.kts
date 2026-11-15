@@ -1,5 +1,6 @@
 plugins {
     java
+    `maven-publish`
 }
 
 group = "com.minihttp"
@@ -8,6 +9,25 @@ version = "0.1.0-SNAPSHOT"
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(26)
+    }
+    withSourcesJar()
+}
+
+// 사설 저장소 https://maven.apsode.co.kr 에 배포 (./gradlew publish)
+// 인증서/토큰은 ~/.gradle/gradle.properties 에서 읽는다 (systemProp.javax.net.ssl.keyStore*, apsodeUsername/apsodePassword)
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
+    }
+    repositories {
+        maven {
+            name = "apsode"
+            val repositoryName = if (version.toString().endsWith("SNAPSHOT")) "snapshots" else "releases"
+            url = uri("https://maven.apsode.co.kr/$repositoryName")
+            credentials(PasswordCredentials::class)
+        }
     }
 }
 

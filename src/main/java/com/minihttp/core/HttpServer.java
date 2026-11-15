@@ -11,6 +11,7 @@ import com.minihttp.core.register.Register;
 import com.minihttp.core.response.PlainTextResponse;
 import com.minihttp.core.utils.GenericObjectPool;
 import com.minihttp.core.utils.Pool;
+import com.minihttp.log.MiniHttpLogging;
 import com.minihttp.packet.HttpPacketWriter;
 import com.minihttp.packet.HttpResponse;
 import com.minihttp.packet.protocol.HttpStatus;
@@ -28,6 +29,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 
 public final class HttpServer {
+    private static final System.Logger LOGGER = MiniHttpLogging.logger(MiniHttpLogging.SERVER);
+
     private enum State {
         NEW,
         RUNNING,
@@ -83,6 +86,9 @@ public final class HttpServer {
         }
 
         this.listeners.forEach(Listener::startAccepting);
+        for (Listener listener : this.listeners) {
+            LOGGER.log(System.Logger.Level.INFO, "Listening on " + listener.boundAddress());
+        }
     }
 
     public void stop() throws InterruptedException {
@@ -91,6 +97,9 @@ public final class HttpServer {
             return;
         }
 
+        LOGGER.log(System.Logger.Level.INFO, "Shutting down (" + this.register.activeCount() + " open connections)");
+        long startedAt = System.nanoTime();
+
         this.listeners.forEach(Listener::close);
         for (Listener listener : this.listeners) {
             listener.awaitTermination();
@@ -98,6 +107,9 @@ public final class HttpServer {
 
         this.register.closeIdle();
         if (!this.register.awaitEmpty(this.config.shutdownGrace())) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                       "Shutdown grace " + this.config.shutdownGrace() + " exceeded, force closing "
+                               + this.register.activeCount() + " connections");
             this.register.forceCloseAll();
         }
 
@@ -105,6 +117,9 @@ public final class HttpServer {
         if (!this.connections.awaitTermination(this.config.shutdownGrace().toMillis(), TimeUnit.MILLISECONDS)) {
             this.connections.shutdownNow();
         }
+
+        LOGGER.log(System.Logger.Level.INFO,
+                   "Stopped in " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt) + "ms");
     }
 
     private void onAccept(Socket socket) {
@@ -114,6 +129,9 @@ public final class HttpServer {
         }
 
         if (!this.connectionSlots.tryAcquire()) {
+            LOGGER.log(System.Logger.Level.WARNING,
+                       "Rejected " + socket.getRemoteSocketAddress() + " with 503: maxConnections("
+                               + this.config.maxConnections() + ") reached");
             HttpServer.rejectBusy(socket);
             return;
         }

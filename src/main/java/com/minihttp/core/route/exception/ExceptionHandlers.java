@@ -2,6 +2,7 @@ package com.minihttp.core.route.exception;
 
 import com.minihttp.core.response.JsonResponse;
 import com.minihttp.core.response.PlainTextResponse;
+import com.minihttp.log.MiniHttpLogging;
 import com.minihttp.packet.HttpRequest;
 import com.minihttp.packet.HttpResponse;
 import com.minihttp.packet.protocol.HttpStatus;
@@ -24,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </pre>
  */
 public final class ExceptionHandlers {
-    private static final System.Logger LOGGER = System.getLogger(ExceptionHandlers.class.getName());
+    private static final System.Logger LOGGER = MiniHttpLogging.logger(MiniHttpLogging.ERROR);
 
     private final Map<Class<? extends Throwable>, ExceptionHandler<? extends Throwable>> handlers = new ConcurrentHashMap<>();
 

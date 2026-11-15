@@ -18,6 +18,8 @@ import com.minihttp.core.route.exception.ExceptionHandlers;
 import com.minihttp.core.route.exception.ExceptionHandlingHandler;
 import com.minihttp.json.DefaultJsonMapper;
 import com.minihttp.json.JsonMapper;
+import com.minihttp.log.AccessLogHandler;
+import com.minihttp.log.MiniHttpLogging;
 import lombok.NonNull;
 
 import java.io.IOException;
@@ -27,6 +29,8 @@ import java.util.concurrent.CountDownLatch;
 
 
 public final class MiniHttp {
+    private static final System.Logger LOGGER = MiniHttpLogging.logger(MiniHttpLogging.SERVER);
+
     private final List<BaseRouter> routers = new ArrayList<>();
     private final List<Middleware> middlewares = new ArrayList<>();
     private final DependencyRegistry dependencyRegistry = DependencyRegistry.create();
@@ -70,6 +74,7 @@ public final class MiniHttp {
     public Handler buildHandler() {
         RouterResolver routerResolver = RouterResolver.create(List.copyOf(this.routers));
         this.prepareDependencies(routerResolver.endpoints());
+        MiniHttp.logRoutes(routerResolver.endpoints());
 
         ArgumentBinder argumentBinder = ArgumentBinder.create(this.dependencyRegistry, this.jsonMapper);
         Handler handler = ExceptionHandlingHandler.wrap(
@@ -82,7 +87,7 @@ public final class MiniHttp {
             handler = request -> middleware.handle(request, next);
         }
 
-        return ExceptionHandlingHandler.wrap(handler, this.exceptionHandlers);
+        return AccessLogHandler.wrap(ExceptionHandlingHandler.wrap(handler, this.exceptionHandlers));
     }
 
     public HttpServer start(@NonNull ServerConfig config) throws IOException {
@@ -93,6 +98,7 @@ public final class MiniHttp {
 
 
     public void run(@NonNull ServerConfig config) throws IOException, InterruptedException {
+        MiniHttpLogging.enableConsole();
         HttpServer server = this.start(config);
         CountDownLatch stopped = new CountDownLatch(1);
 
@@ -106,8 +112,14 @@ public final class MiniHttp {
             }
         }));
 
-        server.listeners().forEach(listener -> System.out.println("minihttp listening on " + listener.boundAddress()));
         stopped.await();
+    }
+
+    private static void logRoutes(List<Endpoint> endpoints) {
+        LOGGER.log(System.Logger.Level.INFO, "Registered " + endpoints.size() + " routes");
+        for (Endpoint endpoint : endpoints) {
+            LOGGER.log(System.Logger.Level.INFO, "  " + endpoint.describe());
+        }
     }
 
     private void prepareDependencies(List<Endpoint> endpoints) {

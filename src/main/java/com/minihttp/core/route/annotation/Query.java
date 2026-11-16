@@ -11,4 +11,6 @@ public @interface Query {
     String value() default "";
 
     String defaultValue() default AnnotationDefaults.NO_DEFAULT_VALUE;
+
+    boolean required() default true;
 }

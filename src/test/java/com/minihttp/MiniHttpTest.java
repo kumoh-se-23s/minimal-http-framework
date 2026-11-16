@@ -144,6 +144,18 @@ class MiniHttpTest {
             return text;
         }
 
+        @Get("/absent")
+        public String absent(@Query(required = false) int page, @Query(required = false) boolean exact,
+                             @Query(required = false) Integer size, @Query(required = false) String keyword,
+                             @Query(required = false) List<String> tags, @Header(value = "X-Trace", required = false) String trace) {
+            return page + "/" + exact + "/" + size + "/" + keyword + "/" + tags + "/" + trace;
+        }
+
+        @Get("/required")
+        public String required(int page, @Header("X-Trace") String trace) {
+            return page + "/" + trace;
+        }
+
         @Get("/raw")
         public HttpResponse raw(HttpRequest request) {
             return JsonResponse.fromJsonText(HttpStatus.ACCEPTED, "{\"path\":\"" + request.path() + "\"}");
@@ -290,6 +302,26 @@ class MiniHttpTest {
             HttpResponse filledResponse = this.handler.handle(MiniHttpTest.request(
                     HttpMethod.GET, "/projects/filter?keyword= &page=2&tags=a&tags=b&sort=id"));
             assertEquals("\" /2/[a, b]/[id]\"", MiniHttpTest.bodyOf(filledResponse));
+        }
+
+        @Test
+        void absentOptionalParameterIsTypeDefaultOrNull() throws Exception {
+            HttpResponse response = this.handler.handle(MiniHttpTest.request(HttpMethod.GET, "/projects/absent"));
+
+            assertEquals("\"0/false/null/null/null/null\"", MiniHttpTest.bodyOf(response));
+        }
+
+        @Test
+        void absentRequiredParameterIs422() throws Exception {
+            HttpResponse errorResponse = this.handler.handle(MiniHttpTest.request(HttpMethod.GET, "/projects/required"));
+            String errorBody = MiniHttpTest.bodyOf(errorResponse);
+            assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, errorResponse.status());
+            assertTrue(errorBody.contains("\"type\":\"missing\",\"loc\":[\"query\",\"page\"]"), errorBody);
+            assertTrue(errorBody.contains("\"type\":\"missing\",\"loc\":[\"header\",\"X-Trace\"]"), errorBody);
+
+            HttpResponse okResponse = this.handler.handle(MiniHttpTest.request(
+                    HttpMethod.GET, "/projects/required?page=3", Map.of("X-Trace", "abc"), ""));
+            assertEquals("\"3/abc\"", MiniHttpTest.bodyOf(okResponse));
         }
 
         @Test

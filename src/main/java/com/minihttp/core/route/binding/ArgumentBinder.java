@@ -93,9 +93,8 @@ public final class ArgumentBinder {
         if (effectiveValues.isEmpty()) {
             if (parameter.required()) {
                 errors.add(ArgumentBinder.error(parameter, MISSING_ERROR_TYPE, MISSING_MESSAGE));
-                return ArgumentBinder.placeholder(parameter);
             }
-            return this.wrapOptional(parameter, null);
+            return ArgumentBinder.emptyValue(parameter);
         }
 
         // defaultValue로 채운 값은 검사하지 않고, 요청으로 들어온 query 값만 검사한다.
@@ -108,7 +107,7 @@ public final class ArgumentBinder {
 
         if (rejectsEmptyValue && effectiveValues.contains("")) {
             errors.add(ArgumentBinder.error(parameter, EMPTY_VALUE_ERROR_TYPE, EMPTY_VALUE_MESSAGE));
-            return ArgumentBinder.placeholder(parameter);
+            return ArgumentBinder.emptyValue(parameter);
         }
 
         try {
@@ -116,7 +115,7 @@ public final class ArgumentBinder {
 
         } catch (ConversionException exception) {
             errors.add(ArgumentBinder.error(parameter, exception.errorType(), exception.getMessage()));
-            return ArgumentBinder.placeholder(parameter);
+            return ArgumentBinder.emptyValue(parameter);
         }
     }
 
@@ -158,14 +157,14 @@ public final class ArgumentBinder {
                 return Optional.empty();
             }
             errors.add(new ValidationError(MISSING_ERROR_TYPE, List.of("body"), MISSING_MESSAGE));
-            return ArgumentBinder.placeholder(parameter);
+            return ArgumentBinder.emptyValue(parameter);
         }
 
         Optional<String> maybeContentType = request.header().get(HttpHeaderField.CONTENT_TYPE);
         if (maybeContentType.isPresent() && !ArgumentBinder.isJsonContentType(maybeContentType.get())) {
             errors.add(new ValidationError(
                     "model_attributes_type", List.of("body"), "Content-Type must be application/json"));
-            return ArgumentBinder.placeholder(parameter);
+            return ArgumentBinder.emptyValue(parameter);
         }
 
         try {
@@ -179,7 +178,7 @@ public final class ArgumentBinder {
                 location.addAll(jsonError.location());
                 errors.add(new ValidationError(jsonError.errorType(), location, jsonError.message()));
             }
-            return ArgumentBinder.placeholder(parameter);
+            return ArgumentBinder.emptyValue(parameter);
         }
     }
 
@@ -196,10 +195,10 @@ public final class ArgumentBinder {
     }
 
     /**
-     * 검증 실패한 자리에 넣어 둘 값. 어차피 메서드는 호출되지 않지만,
-     * 원시 타입 자리에 null을 넣어 두면 나중에 실수로 호출됐을 때 원인을 찾기 어려우니 기본값을 넣는다.
+     * 값이 없는 선택 파라미터, 또는 검증에 실패한 자리에 넣을 값.
+     * 원시 타입은 그 타입의 기본값(0, false ...), 참조 타입은 null, {@code Optional<T>}은 empty.
      */
-    private static Object placeholder(ParameterSpec parameter) {
+    private static Object emptyValue(ParameterSpec parameter) {
         Class<?> rawType = parameter.rawValueType();
 
         if (!parameter.optional() && rawType.isPrimitive()) {

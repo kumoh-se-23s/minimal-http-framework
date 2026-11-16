@@ -30,6 +30,8 @@ import java.util.Optional;
 public final class ArgumentBinder {
     private static final String MISSING_ERROR_TYPE = "missing";
     private static final String MISSING_MESSAGE = "Field required";
+    private static final String EMPTY_VALUE_ERROR_TYPE = "string_too_short";
+    private static final String EMPTY_VALUE_MESSAGE = "String should have at least 1 character";
 
     private final DependencyRegistry dependencyRegistry;
     private final JsonMapper jsonMapper;
@@ -96,9 +98,17 @@ public final class ArgumentBinder {
             return this.wrapOptional(parameter, null);
         }
 
+        // defaultValue로 채운 값은 검사하지 않고, 요청으로 들어온 query 값만 검사한다.
+        boolean rejectsEmptyValue = parameter.source() == ParameterSource.QUERY && !textValues.isEmpty();
+
         Type valueType = parameter.valueType();
         if (Types.isCollection(valueType)) {
-            return this.wrapOptional(parameter, this.convertCollection(parameter, effectiveValues, errors));
+            return this.wrapOptional(parameter, this.convertCollection(parameter, effectiveValues, rejectsEmptyValue, errors));
+        }
+
+        if (rejectsEmptyValue && effectiveValues.contains("")) {
+            errors.add(ArgumentBinder.error(parameter, EMPTY_VALUE_ERROR_TYPE, EMPTY_VALUE_MESSAGE));
+            return ArgumentBinder.placeholder(parameter);
         }
 
         try {
@@ -110,20 +120,24 @@ public final class ArgumentBinder {
         }
     }
 
-    private Collection<Object> convertCollection(ParameterSpec parameter, List<String> textValues, List<ValidationError> errors) {
+    private Collection<Object> convertCollection(ParameterSpec parameter, List<String> textValues, boolean rejectsEmptyValue,
+                                                 List<ValidationError> errors) {
         Class<?> elementType = Types.rawType(Types.typeArgument(parameter.valueType(), 0));
         Collection<Object> collection = Types.newCollection(parameter.rawValueType());
 
         for (int valueIndex = 0; valueIndex < textValues.size(); valueIndex++) {
+            String textValue = textValues.get(valueIndex);
+
+            if (rejectsEmptyValue && textValue.isEmpty()) {
+                errors.add(ArgumentBinder.elementError(parameter, valueIndex, EMPTY_VALUE_ERROR_TYPE, EMPTY_VALUE_MESSAGE));
+                continue;
+            }
+
             try {
-                collection.add(ScalarConverter.convert(textValues.get(valueIndex), elementType));
+                collection.add(ScalarConverter.convert(textValue, elementType));
 
             } catch (ConversionException exception) {
-                errors.add(new ValidationError(
-                        exception.errorType(),
-                        List.of(parameter.source().locationName(), parameter.name(), valueIndex),
-                        exception.getMessage()
-                ));
+                errors.add(ArgumentBinder.elementError(parameter, valueIndex, exception.errorType(), exception.getMessage()));
             }
         }
 
@@ -197,5 +211,9 @@ public final class ArgumentBinder {
 
     private static ValidationError error(ParameterSpec parameter, String errorType, String message) {
         return new ValidationError(errorType, List.of(parameter.source().locationName(), parameter.name()), message);
+    }
+
+    private static ValidationError elementError(ParameterSpec parameter, int valueIndex, String errorType, String message) {
+        return new ValidationError(errorType, List.of(parameter.source().locationName(), parameter.name(), valueIndex), message);
     }
 }

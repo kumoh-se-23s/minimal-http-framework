@@ -133,6 +133,17 @@ class MiniHttpTest {
             return userAgent + "/" + trace;
         }
 
+        @Get("/filter")
+        public String filter(Optional<String> keyword, Optional<Integer> page, Optional<List<String>> tags,
+                             @Query(defaultValue = "") String sort) {
+            return keyword.orElse("-") + "/" + page.orElse(-1) + "/" + tags.orElse(List.of()) + "/[" + sort + "]";
+        }
+
+        @Get("/echo")
+        public String echo(String text) {
+            return text;
+        }
+
         @Get("/raw")
         public HttpResponse raw(HttpRequest request) {
             return JsonResponse.fromJsonText(HttpStatus.ACCEPTED, "{\"path\":\"" + request.path() + "\"}");
@@ -159,7 +170,8 @@ class MiniHttpTest {
         if (questionIndex >= 0) {
             for (String queryPair : target.substring(questionIndex + 1).split("&")) {
                 String[] keyAndValue = queryPair.split("=", 2);
-                queryParams.computeIfAbsent(keyAndValue[0], ignored -> new ArrayList<>()).add(keyAndValue[1]);
+                String value = keyAndValue.length > 1 ? keyAndValue[1] : "";
+                queryParams.computeIfAbsent(keyAndValue[0], ignored -> new ArrayList<>()).add(value);
             }
         }
 
@@ -242,6 +254,50 @@ class MiniHttpTest {
             assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, errorResponse.status());
             assertTrue(errorBody.contains("\"loc\":[\"query\",\"states\",1]"), errorBody);
             assertTrue(errorBody.contains("\"type\":\"missing\",\"loc\":[\"query\",\"since\"]"), errorBody);
+        }
+
+        @Test
+        void emptyQueryValueIs422ForEveryType() throws Exception {
+            String emptyValueError = "\"type\":\"string_too_short\",\"loc\":[\"query\",%s]";
+
+            for (String target : List.of("/projects/echo?text=", "/projects/echo?text", "/projects/echo?text=a&text=")) {
+                HttpResponse response = this.handler.handle(MiniHttpTest.request(HttpMethod.GET, target));
+                String body = MiniHttpTest.bodyOf(response);
+                assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, response.status(), target);
+                assertTrue(body.contains(emptyValueError.formatted("\"text\"")), body);
+            }
+
+            HttpResponse optionalResponse = this.handler.handle(MiniHttpTest.request(
+                    HttpMethod.GET, "/projects/filter?keyword=&page="));
+            String optionalBody = MiniHttpTest.bodyOf(optionalResponse);
+            assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, optionalResponse.status());
+            assertTrue(optionalBody.contains(emptyValueError.formatted("\"keyword\"")), optionalBody);
+            assertTrue(optionalBody.contains(emptyValueError.formatted("\"page\"")), optionalBody);
+
+            HttpResponse listResponse = this.handler.handle(MiniHttpTest.request(
+                    HttpMethod.GET, "/projects/filter?tags=a&tags=&tags="));
+            String listBody = MiniHttpTest.bodyOf(listResponse);
+            assertEquals(HttpStatus.UNPROCESSABLE_CONTENT, listResponse.status());
+            assertTrue(listBody.contains(emptyValueError.formatted("\"tags\",1")), listBody);
+            assertTrue(listBody.contains(emptyValueError.formatted("\"tags\",2")), listBody);
+        }
+
+        @Test
+        void absentQueryKeyAndEmptyDefaultValueStillWork() throws Exception {
+            HttpResponse absentResponse = this.handler.handle(MiniHttpTest.request(HttpMethod.GET, "/projects/filter"));
+            assertEquals("\"-/-1/[]/[]\"", MiniHttpTest.bodyOf(absentResponse));
+
+            HttpResponse filledResponse = this.handler.handle(MiniHttpTest.request(
+                    HttpMethod.GET, "/projects/filter?keyword= &page=2&tags=a&tags=b&sort=id"));
+            assertEquals("\" /2/[a, b]/[id]\"", MiniHttpTest.bodyOf(filledResponse));
+        }
+
+        @Test
+        void emptyHeaderValueIsStillAllowed() throws Exception {
+            HttpResponse response = this.handler.handle(MiniHttpTest.request(
+                    HttpMethod.GET, "/projects/header", Map.of("User-Agent", "curl", "X-Trace", ""), ""));
+
+            assertEquals("\"curl/\"", MiniHttpTest.bodyOf(response));
         }
 
         @Test

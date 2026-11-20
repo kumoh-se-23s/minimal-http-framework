@@ -4,6 +4,7 @@ import com.minihttp.config.OpenApiConfig;
 import com.minihttp.config.ServerConfig;
 import com.minihttp.core.HttpServer;
 import com.minihttp.core.handler.Handler;
+import com.minihttp.core.inject.Container;
 import com.minihttp.core.middleware.Middleware;
 import com.minihttp.core.route.BaseRouter;
 import com.minihttp.core.route.RouteHandler;
@@ -32,14 +33,16 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.function.Function;
 
 
 public final class MiniHttp {
     private static final System.Logger LOGGER = MiniHttpLogging.logger(MiniHttpLogging.SERVER);
 
-    private final List<BaseRouter> routers = new ArrayList<>();
+    private final Container container = Container.create();
+    private final List<Function<Container, BaseRouter>> routerFactories = new ArrayList<>();
     private final List<Middleware> middlewares = new ArrayList<>();
-    private final DependencyRegistry dependencyRegistry = DependencyRegistry.create();
+    private final DependencyRegistry dependencyRegistry = DependencyRegistry.create(this.container);
     private final ExceptionHandlers exceptionHandlers = ExceptionHandlers.createDefault();
     private JsonMapper jsonMapper = DefaultJsonMapper.getInstance();
     private OpenApiConfig openApiConfig = OpenApiConfig.builder().build();
@@ -52,7 +55,22 @@ public final class MiniHttp {
     }
 
     public MiniHttp includeRouter(@NonNull BaseRouter router) {
-        this.routers.add(router);
+        this.routerFactories.add(container -> router);
+        return this;
+    }
+
+    public MiniHttp includeRouter(@NonNull Class<? extends BaseRouter> routerType) {
+        this.routerFactories.add(container -> container.get(routerType));
+        return this;
+    }
+
+    public <T> MiniHttp bind(@NonNull Class<T> type, @NonNull Class<? extends T> implementation) {
+        this.container.bind(type, implementation);
+        return this;
+    }
+
+    public <T> MiniHttp provide(@NonNull Class<T> type, @NonNull T instance) {
+        this.container.provide(type, instance);
         return this;
     }
 
@@ -84,7 +102,10 @@ public final class MiniHttp {
 
 
     public Handler buildHandler() {
-        RouterResolver routerResolver = RouterResolver.create(List.copyOf(this.routers));
+        List<BaseRouter> routers = this.routerFactories.stream()
+                                                       .map(routerFactory -> routerFactory.apply(this.container))
+                                                       .toList();
+        RouterResolver routerResolver = RouterResolver.create(routers);
         this.prepareDependencies(routerResolver.endpoints());
         MiniHttp.logRoutes(routerResolver.endpoints());
 
@@ -107,9 +128,16 @@ public final class MiniHttp {
     }
 
     public HttpServer start(@NonNull ServerConfig config) throws IOException {
-        HttpServer server = new HttpServer(config, this.buildHandler());
-        server.start();
-        return server;
+        try {
+            HttpServer server = new HttpServer(config, this.buildHandler());
+            server.onStopped(this.container::close);
+            server.start();
+            return server;
+
+        } catch (IOException | RuntimeException exception) {
+            this.container.close();
+            throw exception;
+        }
     }
 
 

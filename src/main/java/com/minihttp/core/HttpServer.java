@@ -20,6 +20,7 @@ import lombok.NonNull;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -47,6 +48,7 @@ public final class HttpServer {
     private final Pool<byte[]> readBuffers;
     private final Register register;
 
+    private final List<Runnable> stopCallbacks = new CopyOnWriteArrayList<>();
     private final AtomicReference<State> state = new AtomicReference<>(State.NEW);
 
     public HttpServer(@NonNull ServerConfig config, @NonNull Handler handler) {
@@ -67,6 +69,10 @@ public final class HttpServer {
                 () -> new ReadBufferFactory(config.readBufferSize())
         );
         this.register = new ConnectionRegister();
+    }
+
+    public void onStopped(@NonNull Runnable callback) {
+        this.stopCallbacks.add(callback);
     }
 
     public void start() throws IOException {
@@ -118,8 +124,21 @@ public final class HttpServer {
             this.connections.shutdownNow();
         }
 
+        this.runStopCallbacks();
+
         LOGGER.log(System.Logger.Level.INFO,
                    "Stopped in " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt) + "ms");
+    }
+
+    private void runStopCallbacks() {
+        for (Runnable callback : this.stopCallbacks) {
+            try {
+                callback.run();
+
+            } catch (RuntimeException exception) {
+                LOGGER.log(System.Logger.Level.WARNING, "Stop callback failed", exception);
+            }
+        }
     }
 
     private void onAccept(Socket socket) {

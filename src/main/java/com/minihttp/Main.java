@@ -1,8 +1,12 @@
 package com.minihttp;
 
 import com.minihttp.config.ServerConfig;
+import com.minihttp.repository.InMemoryMemoRepository;
+import com.minihttp.repository.MemoRepository;
 import com.minihttp.router.ExampleRouter;
+import com.minihttp.router.MemoRouter;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -10,7 +14,10 @@ import java.util.stream.Stream;
 public class Main {
     public static void main(String[] args) throws Exception {
         MiniHttp.create()
+                .bind(MemoRepository.class, InMemoryMemoRepository.class)
+                .provide(Clock.class, Clock.systemDefaultZone())
                 .includeRouter(new ExampleRouter())
+                .includeRouter(MemoRouter.class)
                 .run(ServerConfig.builder().listen(8080).build());
 
 

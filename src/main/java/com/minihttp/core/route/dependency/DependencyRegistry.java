@@ -1,9 +1,9 @@
 package com.minihttp.core.route.dependency;
 
 import com.minihttp.convert.Types;
+import com.minihttp.core.inject.Container;
 import lombok.NonNull;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.Map;
@@ -15,12 +15,14 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class DependencyRegistry {
     private final Map<Class<?>, Dependency<?>> dependencies = new ConcurrentHashMap<>();
+    private final Container container;
 
-    private DependencyRegistry() {
+    private DependencyRegistry(Container container) {
+        this.container = container;
     }
 
-    public static DependencyRegistry create() {
-        return new DependencyRegistry();
+    public static DependencyRegistry create(@NonNull Container container) {
+        return new DependencyRegistry(container);
     }
 
     public void register(@NonNull Dependency<?> dependency) {
@@ -32,11 +34,11 @@ public final class DependencyRegistry {
     }
 
     /**
-     * 서버 시작 전에 부른다. 등록된 인스턴스가 없으면 기본 생성자로 만들어 두고,
+     * 서버 시작 전에 부른다. 등록된 인스턴스가 없으면 생성자 주입으로 만들어 두고,
      * 만들어 내는 값의 타입이 파라미터 타입에 들어갈 수 있는지 검사한다.
      */
     public void prepare(Class<? extends Dependency<?>> dependencyType, Class<?> parameterType, String parameterDescription) {
-        this.dependencies.computeIfAbsent(dependencyType, DependencyRegistry::instantiate);
+        this.dependencies.computeIfAbsent(dependencyType, this::instantiate);
 
         Optional<Class<?>> maybeProvidedType = DependencyRegistry.providedType(dependencyType);
         if (maybeProvidedType.isEmpty()) {
@@ -61,20 +63,14 @@ public final class DependencyRegistry {
         return dependency;
     }
 
-    private static Dependency<?> instantiate(Class<?> dependencyType) {
-        try {
-            Constructor<?> constructor = dependencyType.getDeclaredConstructor();
-            constructor.setAccessible(true);
-            return (Dependency<?>) constructor.newInstance();
+    private Dependency<?> instantiate(Class<?> dependencyType) {
+        Object dependency = this.container.get(dependencyType);
 
-        } catch (NoSuchMethodException exception) {
-            throw new IllegalStateException(
-                    dependencyType.getName() + " has no no-argument constructor. Register an instance with app.dependency(...)",
-                    exception);
-
-        } catch (ReflectiveOperationException exception) {
-            throw new IllegalStateException("Failed to create dependency " + dependencyType.getName(), exception);
+        if (!(dependency instanceof Dependency<?> createdDependency)) {
+            throw new IllegalStateException(dependencyType.getName() + " is not a " + Dependency.class.getName());
         }
+
+        return createdDependency;
     }
 
     /** {@code class CurrentUserId implements Dependency<Long>}에서 Long을 찾는다. 알 수 없으면 empty. */

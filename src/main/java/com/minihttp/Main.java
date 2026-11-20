@@ -1,26 +1,69 @@
 package com.minihttp;
 
 import com.minihttp.config.ServerConfig;
+import com.minihttp.core.HttpServer;
+import com.minihttp.infra.AppSettings;
+import com.minihttp.infra.ConsoleNotificationSender;
+import com.minihttp.infra.IdGenerator;
+import com.minihttp.infra.NotificationSender;
+import com.minihttp.infra.SequenceIdGenerator;
+import com.minihttp.log.MiniHttpLogging;
 import com.minihttp.repository.InMemoryMemoRepository;
+import com.minihttp.repository.InMemoryOrderRepository;
 import com.minihttp.repository.MemoRepository;
+import com.minihttp.repository.OrderRepository;
 import com.minihttp.router.ExampleRouter;
 import com.minihttp.router.MemoRouter;
+import com.minihttp.router.OrderRouter;
+import com.minihttp.service.BulkDiscountPriceCalculator;
+import com.minihttp.service.PriceCalculator;
 
 import java.time.Clock;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 public class Main {
+    private static final System.Logger LOGGER = MiniHttpLogging.logger("minihttp.example");
+
     public static void main(String[] args) throws Exception {
-        MiniHttp.create()
-                .bind(MemoRepository.class, InMemoryMemoRepository.class)
-                .provide(Clock.class, Clock.systemDefaultZone())
-                .includeRouter(new ExampleRouter())
-                .includeRouter(MemoRouter.class)
-                .run(ServerConfig.builder().listen(8080).build());
+        MiniHttpLogging.enableConsole();
+        ExecutorService notificationExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
+        HttpServer server = MiniHttp.create()
+                                    .bind(MemoRepository.class, InMemoryMemoRepository.class)
+                                    .bind(OrderRepository.class, InMemoryOrderRepository.class)
+                                    .bind(NotificationSender.class, ConsoleNotificationSender.class)
+                                    .bind(PriceCalculator.class, BulkDiscountPriceCalculator.class)
+                                    .provide(Clock.class, Clock.systemDefaultZone())
+                                    .provide(AppSettings.class, new AppSettings("mini-shop", 2, "secret-key"))
+                                    .provide(IdGenerator.class, new SequenceIdGenerator(1000))
+                                    .provide(ExecutorService.class, notificationExecutor)
+                                    .includeRouter(new ExampleRouter())
+                                    .includeRouter(MemoRouter.class)
+                                    .includeRouter(OrderRouter.class)
+                                    .start(ServerConfig.builder().listen(8080).build());
 
+        server.onStopped(() -> Main.shutdownNotificationExecutor(notificationExecutor));
+        Runtime.getRuntime().addShutdownHook(Thread.ofPlatform().unstarted(() -> Main.stopServer(server)));
+    }
+
+    private static void shutdownNotificationExecutor(ExecutorService notificationExecutor) {
+        LOGGER.log(System.Logger.Level.INFO,
+                   "Notification executor after container close: isShutdown=" + notificationExecutor.isShutdown()
+                           + ", shutting it down from Main");
+        notificationExecutor.close();
+    }
+
+    private static void stopServer(HttpServer server) {
+        try {
+            server.stop();
+
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
 

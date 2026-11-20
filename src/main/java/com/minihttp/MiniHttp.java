@@ -1,5 +1,6 @@
 package com.minihttp;
 
+import com.minihttp.config.OpenApiConfig;
 import com.minihttp.config.ServerConfig;
 import com.minihttp.core.HttpServer;
 import com.minihttp.core.handler.Handler;
@@ -16,10 +17,15 @@ import com.minihttp.core.route.dependency.DependencyRegistry;
 import com.minihttp.core.route.exception.ExceptionHandler;
 import com.minihttp.core.route.exception.ExceptionHandlers;
 import com.minihttp.core.route.exception.ExceptionHandlingHandler;
+import com.minihttp.core.route.exception.RequestValidationException;
+import com.minihttp.core.route.template.PathTemplate;
 import com.minihttp.json.DefaultJsonMapper;
 import com.minihttp.json.JsonMapper;
 import com.minihttp.log.AccessLogHandler;
 import com.minihttp.log.MiniHttpLogging;
+import com.minihttp.openapi.OpenApiDocument;
+import com.minihttp.openapi.OpenApiHandler;
+import com.minihttp.packet.protocol.HttpMethod;
 import lombok.NonNull;
 
 import java.io.IOException;
@@ -36,6 +42,7 @@ public final class MiniHttp {
     private final DependencyRegistry dependencyRegistry = DependencyRegistry.create();
     private final ExceptionHandlers exceptionHandlers = ExceptionHandlers.createDefault();
     private JsonMapper jsonMapper = DefaultJsonMapper.getInstance();
+    private OpenApiConfig openApiConfig = OpenApiConfig.builder().build();
 
     private MiniHttp() {
     }
@@ -70,6 +77,11 @@ public final class MiniHttp {
         return this;
     }
 
+    public MiniHttp openApi(@NonNull OpenApiConfig openApiConfig) {
+        this.openApiConfig = openApiConfig;
+        return this;
+    }
+
 
     public Handler buildHandler() {
         RouterResolver routerResolver = RouterResolver.create(List.copyOf(this.routers));
@@ -81,6 +93,10 @@ public final class MiniHttp {
                 RouteHandler.create(routerResolver, argumentBinder, this.jsonMapper),
                 this.exceptionHandlers
         );
+
+        if (this.openApiConfig.enabled()) {
+            handler = this.wrapOpenApi(handler, routerResolver.endpoints());
+        }
 
         for (Middleware middleware : this.middlewares) {
             Handler next = handler;
@@ -119,6 +135,33 @@ public final class MiniHttp {
         LOGGER.log(System.Logger.Level.INFO, "Registered " + endpoints.size() + " routes");
         for (Endpoint endpoint : endpoints) {
             LOGGER.log(System.Logger.Level.INFO, "  " + endpoint.describe());
+        }
+    }
+
+    private Handler wrapOpenApi(Handler handler, List<Endpoint> endpoints) {
+        List<String> reservedPaths = OpenApiHandler.reservedPaths(this.openApiConfig);
+        MiniHttp.validateOpenApiPaths(endpoints, reservedPaths);
+
+        boolean validationErrorsDocumented = !this.exceptionHandlers.isCustomized(RequestValidationException.class);
+        String specJson = OpenApiDocument.create(this.openApiConfig, endpoints, validationErrorsDocumented).toJson();
+        LOGGER.log(System.Logger.Level.INFO,
+                   "OpenAPI docs at " + this.openApiConfig.docsPath() + " (spec " + this.openApiConfig.specPath() + ")");
+        return OpenApiHandler.wrap(handler, this.openApiConfig, specJson);
+    }
+
+    private static void validateOpenApiPaths(List<Endpoint> endpoints, List<String> reservedPaths) {
+        for (Endpoint endpoint : endpoints) {
+            if (endpoint.httpMethod() != HttpMethod.GET) {
+                continue;
+            }
+
+            for (String reservedPath : reservedPaths) {
+                if (PathTemplate.isSamePath(endpoint.pathTemplate(), PathTemplate.create(reservedPath))) {
+                    throw new IllegalStateException(
+                            "Endpoint " + endpoint.describe() + " conflicts with OpenAPI path " + reservedPath
+                                    + ". Change the endpoint or OpenApiConfig paths, or disable OpenAPI");
+                }
+            }
         }
     }
 

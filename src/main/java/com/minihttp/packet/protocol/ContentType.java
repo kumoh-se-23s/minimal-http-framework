@@ -7,6 +7,9 @@ import java.util.Optional;
 
 public enum ContentType {
     TEXT_PLAIN("text/plain", StandardCharsets.UTF_8),
+    TEXT_HTML("text/html", StandardCharsets.UTF_8),
+    TEXT_CSS("text/css", StandardCharsets.UTF_8),
+    TEXT_JAVASCRIPT("text/javascript", StandardCharsets.UTF_8),
 
     APPLICATION_JSON("application/json", null),
     APPLICATION_FORM_URLENCODED("application/x-www-form-urlencoded", null),

@@ -228,7 +228,7 @@ public final class JsonWriter {
     }
 
     /** 상위 클래스의 필드가 먼저 오도록 모은다. */
-    static List<Field> serializableFields(Class<?> type) {
+    public static List<Field> serializableFields(Class<?> type) {
         return FIELD_CACHE.computeIfAbsent(type, JsonWriter::collectFields);
     }
 
@@ -274,7 +274,7 @@ public final class JsonWriter {
         }
     }
 
-    static boolean isJdkType(Class<?> type) {
+    public static boolean isJdkType(Class<?> type) {
         String packageName = type.getPackageName();
         return packageName.startsWith("java.") || packageName.startsWith("javax.") || packageName.startsWith("jdk.");
     }

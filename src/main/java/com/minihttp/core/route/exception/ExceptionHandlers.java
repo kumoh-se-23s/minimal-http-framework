@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -28,19 +29,29 @@ public final class ExceptionHandlers {
     private static final System.Logger LOGGER = MiniHttpLogging.logger(MiniHttpLogging.ERROR);
 
     private final Map<Class<? extends Throwable>, ExceptionHandler<? extends Throwable>> handlers = new ConcurrentHashMap<>();
+    private final Set<Class<? extends Throwable>> customizedTypes = ConcurrentHashMap.newKeySet();
 
     private ExceptionHandlers() {
     }
 
     public static ExceptionHandlers createDefault() {
         ExceptionHandlers exceptionHandlers = new ExceptionHandlers();
-        exceptionHandlers.register(HttpStatusException.class, ExceptionHandlers::handleHttpStatus);
-        exceptionHandlers.register(RequestValidationException.class, ExceptionHandlers::handleValidation);
-        exceptionHandlers.register(Exception.class, ExceptionHandlers::handleUnexpected);
+        exceptionHandlers.registerDefault(HttpStatusException.class, ExceptionHandlers::handleHttpStatus);
+        exceptionHandlers.registerDefault(RequestValidationException.class, ExceptionHandlers::handleValidation);
+        exceptionHandlers.registerDefault(Exception.class, ExceptionHandlers::handleUnexpected);
         return exceptionHandlers;
     }
 
     public <T extends Throwable> void register(@NonNull Class<T> exceptionType, @NonNull ExceptionHandler<? super T> handler) {
+        this.handlers.put(exceptionType, handler);
+        this.customizedTypes.add(exceptionType);
+    }
+
+    public boolean isCustomized(@NonNull Class<? extends Throwable> exceptionType) {
+        return this.customizedTypes.contains(exceptionType);
+    }
+
+    private <T extends Throwable> void registerDefault(Class<T> exceptionType, ExceptionHandler<? super T> handler) {
         this.handlers.put(exceptionType, handler);
     }
 

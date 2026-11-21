@@ -8,6 +8,7 @@ import com.minihttp.core.response.PlainTextResponse;
 import com.minihttp.core.route.binding.Endpoint;
 import com.minihttp.core.route.binding.ParameterSource;
 import com.minihttp.core.route.binding.ParameterSpec;
+import com.minihttp.core.route.dependency.security.SecureSchemaType;
 import com.minihttp.json.JsonWriter;
 import com.minihttp.packet.HttpResponse;
 import com.minihttp.packet.protocol.ContentType;
@@ -41,6 +42,9 @@ public final class OpenApiDocument {
     private final boolean validationErrorsDocumented;
     private final SchemaGenerator schemaGenerator = SchemaGenerator.create(
             Set.of(VALIDATION_ERROR_RESPONSE, VALIDATION_ERROR_DETAIL));
+
+    private final Map<Class<?>, String> securitySchemeNames = new HashMap<>();
+    private final Map<String, Object> securitySchemes = new LinkedHashMap<>();
 
     private boolean validationErrorUsed;
 
@@ -77,8 +81,15 @@ public final class OpenApiDocument {
         document.put("info", this.info());
         document.put("paths", paths);
 
+        Map<String, Object> components = new LinkedHashMap<>();
         if (!schemas.isEmpty()) {
-            document.put("components", Map.of("schemas", schemas));
+            components.put("schemas", schemas);
+        }
+        if (!this.securitySchemes.isEmpty()) {
+            components.put("securitySchemes", this.securitySchemes);
+        }
+        if (!components.isEmpty()) {
+            document.put("components", components);
         }
 
         return document;
@@ -140,7 +151,46 @@ public final class OpenApiDocument {
                 .ifPresent(body -> operation.put("requestBody", this.requestBody(body)));
 
         operation.put("responses", this.responses(endpoint));
+
+        Map<String, Object> securityRequirement = this.securityRequirement(endpoint);
+        if (!securityRequirement.isEmpty()) {
+            operation.put("security", List.of(securityRequirement));
+        }
+
         return operation;
+    }
+
+    private Map<String, Object> securityRequirement(Endpoint endpoint) {
+        Map<String, Object> securityRequirement = new LinkedHashMap<>();
+
+        for (ParameterSpec parameter : endpoint.parameters()) {
+            if (parameter.source() != ParameterSource.DEPENDENCY) {
+                continue;
+            }
+
+            SecureSchemaType.from(parameter.dependencyType())
+                            .map(schemaType -> this.securitySchemeName(parameter.dependencyType(), schemaType))
+                            .ifPresent(schemeName -> securityRequirement.put(schemeName, List.of()));
+        }
+
+        return securityRequirement;
+    }
+
+    private String securitySchemeName(Class<?> dependencyType, SecureSchemaType schemaType) {
+        return this.securitySchemeNames.computeIfAbsent(dependencyType, ignored -> {
+            String schemeName = this.securitySchemes.containsKey(dependencyType.getSimpleName())
+                    ? dependencyType.getName()
+                    : dependencyType.getSimpleName();
+            this.securitySchemes.put(schemeName, OpenApiDocument.securityScheme(schemaType));
+            return schemeName;
+        });
+    }
+
+    private static Map<String, Object> securityScheme(SecureSchemaType schemaType) {
+        Map<String, Object> securityScheme = new LinkedHashMap<>();
+        securityScheme.put("type", "http");
+        securityScheme.put("scheme", schemaType.getOpenApiScheme());
+        return securityScheme;
     }
 
     private Map<String, Object> parameter(ParameterSpec parameter) {

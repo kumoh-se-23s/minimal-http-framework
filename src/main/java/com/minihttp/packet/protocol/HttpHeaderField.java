@@ -18,7 +18,8 @@ public enum HttpHeaderField {
     ORIGIN("Origin"),
     SERVER("Server"),
     TRANSFER_ENCODING("Transfer-Encoding"),
-    VARY("Vary");
+    VARY("Vary"),
+    WWW_AUTHENTICATE("WWW-Authenticate");
 
     private final String fieldName;
 

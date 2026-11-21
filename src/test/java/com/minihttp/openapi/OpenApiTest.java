@@ -7,10 +7,13 @@ import com.minihttp.core.response.JsonResponse;
 import com.minihttp.core.response.PlainTextResponse;
 import com.minihttp.core.route.BaseRouter;
 import com.minihttp.core.route.annotation.Body;
+import com.minihttp.core.route.annotation.Depends;
 import com.minihttp.core.route.annotation.Get;
 import com.minihttp.core.route.annotation.Header;
 import com.minihttp.core.route.annotation.Post;
 import com.minihttp.core.route.annotation.Query;
+import com.minihttp.core.route.dependency.security.BasicSchema;
+import com.minihttp.core.route.dependency.security.BearerSchema;
 import com.minihttp.core.route.exception.RequestValidationException;
 import com.minihttp.json.JsonParser;
 import com.minihttp.packet.HttpRequest;
@@ -227,6 +230,41 @@ class OpenApiTest {
         @Post("/docs")
         public String docs() {
             return "mine";
+        }
+    }
+
+    public static final class TokenAuth extends BearerSchema<String> {
+        @Override
+        protected String authenticate(String token) {
+            return token;
+        }
+    }
+
+    public static final class PasswordAuth extends BasicSchema<String> {
+        @Override
+        protected String authenticate(String username, String password) {
+            return username;
+        }
+    }
+
+    public static final class SecurityRouter extends BaseRouter {
+        public SecurityRouter() {
+            super("/secure");
+        }
+
+        @Get("/bearer")
+        public String bearer(@Depends(TokenAuth.class) String token) {
+            return token;
+        }
+
+        @Get("/both")
+        public String both(@Depends(TokenAuth.class) String token, @Depends(PasswordAuth.class) String username) {
+            return token + username;
+        }
+
+        @Get("/public")
+        public String open() {
+            return "open";
         }
     }
 
@@ -498,6 +536,38 @@ class OpenApiTest {
         void noContentStatusHasNoBody() {
             Map<String, Object> response = OpenApiTest.at(OpenApiTest.operation(this.spec, "/operations/empty", "post"), "responses", "204");
             assertFalse(response.containsKey("content"));
+        }
+    }
+
+    @Nested
+    @DisplayName("보안 스키마")
+    class SecurityTest {
+        private final Map<String, Object> spec;
+
+        SecurityTest() throws Exception {
+            this.spec = OpenApiTest.spec(new SecurityRouter());
+        }
+
+        @Test
+        void securitySchemesAreRegisteredInComponents() {
+            Map<String, Object> securitySchemes = OpenApiTest.at(this.spec, "components", "securitySchemes");
+            assertEquals(Map.of("type", "http", "scheme", "bearer"), securitySchemes.get("TokenAuth"));
+            assertEquals(Map.of("type", "http", "scheme", "basic"), securitySchemes.get("PasswordAuth"));
+        }
+
+        @Test
+        void operationsListRequiredSchemes() {
+            assertEquals(List.of(Map.of("TokenAuth", List.of())),
+                         OpenApiTest.operation(this.spec, "/secure/bearer", "get").get("security"));
+            assertEquals(List.of(Map.of("TokenAuth", List.of(), "PasswordAuth", List.of())),
+                         OpenApiTest.operation(this.spec, "/secure/both", "get").get("security"));
+            assertFalse(OpenApiTest.operation(this.spec, "/secure/public", "get").containsKey("security"));
+        }
+
+        @Test
+        void documentWithoutSecurityHasNoSecuritySchemes() throws Exception {
+            Map<String, Object> spec = OpenApiTest.spec(new OperationRouter());
+            assertFalse(OpenApiTest.map(spec.get("components")).containsKey("securitySchemes"));
         }
     }
 

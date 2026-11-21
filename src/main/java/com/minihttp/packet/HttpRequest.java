@@ -39,6 +39,10 @@ public class HttpRequest extends HttpPacket {
         this.pathParam.putAll(pathParam);
     }
 
+    public final Optional<String> getAuthHeaderField() {
+        return this.header.get("Authorization");
+    }
+
     public HttpMethod method() {
         return this.method;
     }
